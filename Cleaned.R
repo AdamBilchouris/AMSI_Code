@@ -3,6 +3,7 @@ data <- read.csv('big_removed.csv')
 #add index
 data$index <- 1:nrow(data)
 str(head(data))
+# Make it non-exponential ?
 
 suburbs <- read.csv('suburbs_data.csv')
 str(head(suburbs))
@@ -231,7 +232,6 @@ for(i in 1:length(histPrices)) {
   else if(year >= 2012){
     #testColumn <- c(testColumn, paste('2021', year, sep='/'))
     testColumn <- paste('2021', year, sep='/')
-    print(suburb[1, testColumn])
     ratios <- c(ratios, suburb[1, testColumn])
     histPricesSimple <- c(histPricesSimple, histPrices[i, 3])
   }
@@ -296,6 +296,14 @@ diffRMSE
 
 # Selected variables standardised (from GA).
 # This gives different selected variables.
+predAllStd <- data.frame(pred=predict(modStd, newdata=testStd), actual=testStd$price)
+predAllStd <- na.omit(predAllStd)
+allStdMSE <- mean((predAllStd$actual - predAllStd$pred)^2)
+allStdRMSE <- sqrt(allStdMSE)
+allStdMSE
+allStdRMSE
+
+
 predSelectedStd <- data.frame(pred=predict(modSelectedStd, newdata=testStd), actual=testStd$price)
 predSelectedStd <- na.omit(predSelectedStd)
 # MSE
