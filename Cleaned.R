@@ -5,17 +5,20 @@ data$index <- 1:nrow(data)
 str(head(data))
 # Make it non-exponential ?
 
+library(stringr)
 suburbs <- read.csv('suburbs_data.csv')
+suburbs$suburb <- str_to_title(suburbs$suburb)
 str(head(suburbs))
 crimeSum <- read.csv('sumSuburbs_columns.csv')
+crimeSum$suburb <- str_to_title(crimeSum$suburb)
 str(head(crimeSum))
 
 data2 <- data[, c(2, 3, 5:8, 16, 17)]
 
-data3 <- merge(x=data2, y=suburbs, by='suburb', all.y=F)
+data3 <- merge(x=data2, y=suburbs, by='suburb', all.x=T)
 data3 <- data3[order(data3$index), ]
 
-data4 <- merge(x=data3, y=crimeSum, by='suburb', all.y=F)
+data4 <- merge(x=data3, y=crimeSum, by='suburb', all.x=T)
 
 # No lat/lng for both
 # No crime
@@ -311,3 +314,139 @@ selectedStdMSE <- mean((predSelectedStd$actual - predSelectedStd$pred)^2)
 selectedStdRMSE <- sqrt(selectedStdMSE)
 selectedStdMSE
 selectedStdRMSE
+
+# Historical
+predHistorical <- data.frame(actual=newTest$price)
+historical2 <- read.csv('hist.csv', check.names=F)
+for(i in 1:nrow(newTest)) {
+  testSample <- data[rownames(newTest[i, ]), ]
+  predHistorical[i, 'index'] <- testSample$index
+  suburb <- historical2[historical2$suburb == tolower(testSample$suburb), ]
+  histSales <- testSample$salesHistory
+  library(stringr)
+  histSales2 <- str_split(histSales, '-')
+  histPrices <- data.frame()
+  for(j in 1:length(histSales2[[1]])) {
+    info <- str_split(histSales2[[1]][j], '/')[[1]]
+    # Skip over any sales less than $5000 in case a rental history snuck in.
+    if(as.numeric(info[3]) < 5000) {
+      next
+    }
+    #histPrices <- c(histPrices, c(info[1:3]))
+    histPrices[j, 'month'] <- info[1]
+    histPrices[j, 'year'] <- as.numeric(info[2])
+    histPrices[j, 'price'] <- as.numeric(info[3])
+  }
+  
+  histPrices
+  histPricesSimple <- c()
+  ratios <- c()
+  testColumn <- ''
+  for(j in 1:length(histPrices)) {
+    year <- histPrices[j, 2]
+    if(is.na(year)) { next }
+    if(year == 2021) {
+      month <- histPrices[j, 1]
+      #https://stackoverflow.com/questions/6549239/convert-months-mmm-to-numeric
+      monthNum <- match(month, month.abb)
+      # Add a 0 to the left if the month isn't 10
+      if(monthNum >= 10) { next }
+      monthNum <- str_pad(monthNum, 2, 'left', '0')
+      #testColumn <- c(testColumn, paste('2021-10/2021-', as.character(monthNum), sep=''))
+      testColumn <- paste('2021-10/2021-', as.character(monthNum), sep='')
+      ratios <- c(ratios, suburb[1, testColumn])
+      histPricesSimple <- c(histPricesSimple, histPrices[j, 3])
+    }
+    else if(year >= 2012){
+      #testColumn <- c(testColumn, paste('2021', year, sep='/'))
+      testColumn <- paste('2021', year, sep='/')
+      ratios <- c(ratios, suburb[1, testColumn])
+      histPricesSimple <- c(histPricesSimple, histPrices[j, 3])
+    }
+  }
+  
+  if(length(ratios) == 0) {
+    print('No ratios found. Sales history is too old for current data or includes rental history.')
+    print(testSample$index)
+    print(testSample$salesHistory)
+    predHistorical[i, 'pred'] <- NA
+  }  else {
+    weight <- 1/(length(ratios))
+    weight
+    predd <- 0
+    for(j in 1:length(ratios)) {
+      #print(predd)
+      predd <- predd + (histPricesSimple[j]* ratios[j] * weight)
+      #print(predd)
+    }
+    #print(predd)
+    #print(ratios)
+    predHistorical[i, 'pred'] <- predd
+  }
+}
+
+predHistoricalNoNA <- na.omit(predHistorical)
+historicalMSE <- mean((predHistoricalNoNA$actual - predHistoricalNoNA$pred)^2)
+historicalRMSE <- sqrt(historicalMSE)
+historicalMSE
+historicalRMSE
+
+sprintf('RMSE Difference: Selected Model - Predicted: %f', (selectedRMSE - historicalRMSE))
+
+#================== ISOLATION FOREST ====================
+library(isotree)
+library(knitr)
+
+isoTrain <- newTrain[, c(2:6)]
+isoTest<- newTest[, c(2:6)]
+iso <- isolation.forest(isoTrain, ntrees=1000, nthreads=3)
+predTrain <- predict(iso, isoTrain)
+pred <- predict(iso, isoTest)
+data[which.max(predTrain), ]
+data[which.max(pred), ]
+
+plot(pred)
+plot(predTrain)
+
+predDf <- data.frame(pred)
+predDf[, 'index'] <- rownames(predDf)
+predDfFilter <- predDf[predDf[, 'pred'] > 0.60, ]
+print(predDfFilter)
+ordered <- predDfFilter[order(predDfFilter['pred'], decreasing=T),]
+indices <- c(ordered$index)
+indices
+d <- data[unlist(indices), ]
+d['pred'] <- ordered$pred
+d <- d[, c(1, 3, 5:8, 15, 18)]
+knitr::kable(d)
+
+predDfTrain <- data.frame(predTrain)
+predDfTrain[, 'index'] <- rownames(predDfTrain)
+predDfTrainFilter <- predDfTrain[predDfTrain[, 'predTrain'] > 0.60, ]
+print(predDfTrainFilter)
+orderedTrain <- predDfTrainFilter[order(predDfTrainFilter$pred, decreasing=T),]
+indicesTrain <- c(orderedTrain$index)
+indicesTrain
+dTrain <- data[unlist(indicesTrain), ]
+dTrain['pred'] <- orderedTrain$pred
+dTrain <- dTrain[, c(1, 3, 5:8, 15, 18)]
+knitr::kable(dTrain)
+
+#======= ANOMALY DETECTION =======
+bedroomsThresh <- median(newTrain$bedrooms) + 3*sd(newTrain$bedrooms)
+bathroomsThresh <- median(newTrain$bathrooms) + 3*sd(newTrain$bathrooms)
+parkingSpacesThresh <- median(newTrain$parking_spaces) + 3*sd(newTrain$parking_spaces)
+landSizeThresh <- median(newTrain$land_size) + 3*sd(newTrain$land_size)
+
+testAnomalyDf <- c()
+#testAnomalyDf <- data.frame(=seq(1:nrow(newTest)))
+testAnomalyDf$bedrooms <- as.numeric(newTest[, 'bedrooms'] > bedroomsThresh)
+testAnomalyDf$bathrooms <- as.numeric(newTest[, 'bathrooms'] > bathroomsThresh)
+testAnomalyDf$parking_spaces <- as.numeric(newTest[, 'parking_spaces'] > parkingSpacesThresh)
+testAnomalyDf$land_size <- as.numeric(newTest[, 'land_size'] > landSizeThresh)
+testAnomalyDf$tot <- testAnomalyDf$bedrooms + testAnomalyDf$bathrooms + testAnomalyDf$parking_spaces + testAnomalyDf$land_size
+
+indicesBasic <- which(testAnomalyDf$tot >= 1)
+dBasic <- data[unlist(indicesBasic), ]
+dBasic <- dBasic[, c(1, 3, 5:8, 15)]
+knitr::kable(dBasic)
