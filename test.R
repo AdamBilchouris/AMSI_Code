@@ -389,8 +389,8 @@ knitr::kable(d)
 allSet <- indices
 
 samplesAll <- sample(nrow(data6), nrow(data6)*0.6)
-trainAll <- data6[, samplesAll]
-testAll <- data6[, -samplesAll]
+trainAll <- data6[samplesAll, ]
+testAll <- data6[-samplesAll, ]
 
 # Use GA to get features, use them only.
 modAll <- lm(price ~ ., data=trainAll)
