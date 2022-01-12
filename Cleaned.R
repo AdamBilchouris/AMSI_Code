@@ -408,11 +408,13 @@ data[which.max(pred), ]
 plot(pred)
 plot(predTrain)
 
+# https://en.wikipedia.org/wiki/Isolation_forest#Anomaly_detection_with_isolation_forest
+# (0.5, 1] for the score means it is an anomaly.
 predDf <- data.frame(pred)
 predDf[, 'index'] <- rownames(predDf)
 predDfFilter <- predDf[predDf[, 'pred'] > 0.60, ]
 print(predDfFilter)
-ordered <- predDfFilter[order(predDfFilter['pred'], decreasing=T),]
+ordered <- predDfFilter[order(predDfFilter[, 'pred'], decreasing=T),]
 indices <- c(ordered$index)
 indices
 d <- data[unlist(indices), ]
@@ -433,6 +435,7 @@ dTrain <- dTrain[, c(1, 3, 5:8, 15, 18)]
 knitr::kable(dTrain)
 
 #======= ANOMALY DETECTION =======
+# Use the pre-trained tree instead. It detects anomalies fine.
 bedroomsThresh <- median(newTrain$bedrooms) + 3*sd(newTrain$bedrooms)
 bathroomsThresh <- median(newTrain$bathrooms) + 3*sd(newTrain$bathrooms)
 parkingSpacesThresh <- median(newTrain$parking_spaces) + 3*sd(newTrain$parking_spaces)
@@ -450,3 +453,218 @@ indicesBasic <- which(testAnomalyDf$tot >= 1)
 dBasic <- data[unlist(indicesBasic), ]
 dBasic <- dBasic[, c(1, 3, 5:8, 15)]
 knitr::kable(dBasic)
+
+#======= WEIRD HOUSES ========
+anomalies <- indices
+predHistoricalWeird <- data.frame(actual=newTest[anomalies, 'price'], row.names=anomalies)
+historical2 <- read.csv('hist.csv', check.names=F)
+for(a in anomalies) {
+  # Check for houses
+  testSample <- data[a, ]
+  predHistoricalWeird[a, 'index'] <- testSample$index
+  suburb <- historical2[historical2$suburb == tolower(testSample$suburb), ]
+  histSales <- testSample$salesHistory
+  library(stringr)
+  histSales2 <- str_split(histSales, '-')
+  histPrices <- data.frame()
+  for(j in 1:length(histSales2[[1]])) {
+    info <- str_split(histSales2[[1]][j], '/')[[1]]
+    # Skip over any sales less than $5000 in case a rental history snuck in.
+    if(as.numeric(info[3]) < 5000) {
+      next
+    }
+    #histPrices <- c(histPrices, c(info[1:3]))
+    histPrices[j, 'month'] <- info[1]
+    histPrices[j, 'year'] <- as.numeric(info[2])
+    histPrices[j, 'price'] <- as.numeric(info[3])
+  }
+  
+  histPrices
+  histPricesSimple <- c()
+  ratios <- c()
+  testColumn <- ''
+  for(j in 1:length(histPrices)) {
+    year <- histPrices[j, 2]
+    if(is.na(year)) { next }
+    if(year == 2021) {
+      month <- histPrices[j, 1]
+      #https://stackoverflow.com/questions/6549239/convert-months-mmm-to-numeric
+      monthNum <- match(month, month.abb)
+      # Add a 0 to the left if the month isn't 10
+      if(monthNum >= 10) { next }
+      monthNum <- str_pad(monthNum, 2, 'left', '0')
+      #testColumn <- c(testColumn, paste('2021-10/2021-', as.character(monthNum), sep=''))
+      testColumn <- paste('2021-10/2021-', as.character(monthNum), sep='')
+      ratios <- c(ratios, suburb[1, testColumn])
+      histPricesSimple <- c(histPricesSimple, histPrices[j, 3])
+    }
+    else if(year >= 2012){
+      #testColumn <- c(testColumn, paste('2021', year, sep='/'))
+      testColumn <- paste('2021', year, sep='/')
+      ratios <- c(ratios, suburb[1, testColumn])
+      histPricesSimple <- c(histPricesSimple, histPrices[j, 3])
+    }
+  }
+  
+  if(length(ratios) == 0) {
+    print('No ratios found. Sales history is too old for current data or includes rental history.')
+    print(testSample$index)
+    print(testSample$salesHistory)
+    predHistoricalWeird[a, 'pred'] <- NA
+  }  else {
+    weight <- 1/(length(ratios))
+    weight
+    predd <- 0
+    for(j in 1:length(ratios)) {
+      #print(predd)
+      predd <- predd + (histPricesSimple[j]* ratios[j] * weight)
+      #print(predd)
+    }
+    #print(predd)
+    #print(ratios)
+    predHistoricalWeird[a, 'pred'] <- predd
+  }
+}
+predHistoricalWeird
+histWeirdMSE <- mean((predHistoricalWeird$actual - predHistoricalWeird$pred)^2)
+histWeirdRMSE <- sqrt(histWeirdMSE)
+histWeirdMSE
+histWeirdRMSE
+
+# Model
+predSelectedWeird <- data.frame(pred=predict(modSelected, newdata=newTest[anomalies, ]), actual=newTest[anomalies, 'price'])
+predSelectedWeird <- na.omit(predSelectedWeird)
+# MSE
+selectedWeirdMSE <- mean((predSelectedWeird$actual - predSelectedWeird$pred)^2)
+selectedWeirdRMSE <- sqrt(selectedWeirdMSE)
+selectedWeirdMSE
+selectedWeirdRMSE
+
+histWeirdRMSE
+selectedWeirdRMSE
+sprintf('RMSE Difference: Selected Model - Predicted: %f', (selectedWeirdRMSE - histWeirdRMSE))
+
+
+#======= Extra models (for testing) ======
+basicMod <- lm(price ~ ., data=newTrain)
+interactionsMod <- lm(price ~ .*., data=newTrain)
+library(dplyr)
+ySquared <- 'price'
+formulaSquared <-  paste0("I(", names(data5)[names(data5)!=ySquared], "^2)+", collapse="") %>%
+  paste(ySquared, "~", .) %>%
+  substr(., 1, nchar(.)-1) %>%
+  as.formula
+squaredMod <- lm(formulaSquared, data=newTrain)
+formulaSquared <-  paste0(". + I(", names(data5)[names(data5)!=ySquared], "^2)+", collapse="") %>%
+  paste(ySquared, "~", .) %>%
+  substr(., 1, nchar(.)-1) %>%
+  as.formula
+basicSquaredMod <- lm(formulaSquared, data=newTrain)
+
+x <- model.matrix(basicMod)[, -1]
+str(x)
+y <- model.response(model.frame(basicMod))
+
+fitness <- function(s)
+{
+  inc <- which(s == 1)
+  X <- cbind(1, x[, inc])
+  mod <- lm.fit(X, y)
+  class(mod) <- 'lm'
+  -AIC(mod)
+}
+
+library(GA)
+GABasic <- ga("binary", fitness=fitness, nBits=ncol(x),
+         names=colnames(x), monitor=plot, popSize=100)
+
+x <- model.matrix(interactionsMod)[, -1]
+str(x)
+y <- model.response(model.frame(interactionsMod))
+GAInteractions <- ga("binary", fitness=fitness, nBits=ncol(x),
+         names=colnames(x), monitor=plot, popSize=100)
+
+x <- model.matrix(squaredMod)[, -1]
+str(x)
+y <- model.response(model.frame(squaredMod))
+GASquared <- ga("binary", fitness=fitness, nBits=ncol(x),
+         names=colnames(x), monitor=plot, popSize=100)
+
+x <- model.matrix(basicSquaredMod)[, -1]
+str(x)
+y <- model.response(model.frame(basicSquaredMod))
+GABasicSquared <- ga("binary", fitness=fitness, nBits=ncol(x),
+         names=colnames(x), monitor=plot, popSize=100)
+
+selectedGABasic <- which(GABasic@solution[1, ] == 1)
+selectedNamesGABasic <- names(selectedGABasic)
+formulaStrBasic <- paste('price ~ ', selectedNamesGABasic[1], sep='')
+for(i in 2:length(selectedNamesGABasic)) {
+  formulaStrBasic <- paste(formulaStrBasic, selectedNamesGABasic[i], sep='+')
+}
+newFormulaBasic <- as.formula(formulaStrBasic)
+modSelectedBasic <- lm(newFormulaBasic, data=newTrain)
+
+selectedGAInteractions <- which(GAInteractions@solution[1, ] == 1)
+selectedNamesGAInteractions <- names(selectedGAInteractions)
+formulaStrInteractions <- paste('price ~ ', selectedNamesGAInteractions[1], sep='')
+for(i in 2:length(selectedNamesGAInteractions)) {
+  formulaStrInteractions <- paste(formulaStrInteractions, selectedNamesGAInteractions[i], sep='+')
+}
+newFormulaInteractions <- as.formula(formulaStrInteractions)
+modSelectedInteractions <- lm(newFormulaInteractions, data=newTrain)
+
+selectedGASquared <- which(GASquared@solution[1, ] == 1)
+selectedNamesGASquared <- names(selectedGASquared)
+formulaStrSquared <- paste('price ~ ', selectedNamesGASquared[1], sep='')
+for(i in 2:length(selectedNamesGASquared)) {
+  formulaStrSquared <- paste(formulaStrSquared, selectedNamesGASquared[i], sep='+')
+}
+newFormulaSquared <- as.formula(formulaStrSquared)
+modSelectedSquared <- lm(newFormulaSquared, data=newTrain)
+
+selectedGABasicSquared <- which(GABasicSquared@solution[1, ] == 1)
+selectedNamesGABasicSquared <- names(selectedGABasicSquared)
+formulaStrBasicSquared <- paste('price ~ ', selectedNamesGABasicSquared[1], sep='')
+for(i in 2:length(selectedNamesGASquared)) {
+  formulaStrBasicSquared <- paste(formulaStrBasicSquared, selectedNamesGABasicSquared[i], sep='+')
+}
+newFormulaBasicSquared <- as.formula(formulaStrBasicSquared)
+modSelectedBasicSquared <- lm(newFormulaBasicSquared, data=newTrain)
+
+# MSE, RMSE
+predBasic <- data.frame(pred=predict(modSelectedBasic, newdata=newTest), actual=newTest$price)
+predBasic <- na.omit(predBasic)
+# MSE
+basicMSE <- mean((predBasic$actual - predBasic$pred)^2)
+basicRMSE <- sqrt(basicMSE)
+
+predInteractions <- data.frame(pred=predict(modSelectedInteractions, newdata=newTest), actual=newTest$price)
+predInteractions <- na.omit(predInteractions)
+# MSE
+interactionsMSE <- mean((predInteractions$actual - predInteractions$pred)^2)
+interactionsRMSE <- sqrt(interactionsMSE)
+
+predSquared <- data.frame(pred=predict(modSelectedSquared, newdata=newTest), actual=newTest$price)
+predSquared <- na.omit(predSquared)
+# MSE
+squaredMSE <- mean((predSquared$actual - predSquared$pred)^2)
+squaredRMSE <- sqrt(squaredMSE)
+
+predBasicSquared <- data.frame(pred=predict(modSelectedBasicSquared, newdata=newTest), actual=newTest$price)
+predBasicSquared <- na.omit(predBasicSquared)
+# MSE
+basicSquaredMSE <- mean((predBasicSquared$actual - predBasicSquared$pred)^2)
+basicSquaredRMSE <- sqrt(basicSquaredMSE)
+
+basicRMSE
+interactionsRMSE
+squaredRMSE
+basicSquaredRMSE
+selectedRMSE
+historicalRMSE
+
+# best to worst
+# Historical, selected, interctions, ...
+min(basicRMSE, interactionsRMSE, squaredRMSE, basicSquaredRMSE, historicalRMSE, selectedRMSE)
+
