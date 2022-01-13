@@ -761,6 +761,7 @@ predictSelectedRMSE <- sqrt(predictSelectedMSE)
 
 # Get the historical prices
 library(stringr)
+historical2 <- read.csv('hist.csv', check.names=F)
 predHistoricalNew <- data.frame(actual=newTestNew$price, index=as.numeric(rownames(newTestNew)), row.names=rownames(newTestNew))
 for(i in 1:nrow(newTestNew)) {
   testSample <- data[rownames(newTestNew[i, ]), ]
@@ -798,7 +799,7 @@ for(i in 1:nrow(newTestNew)) {
       monthNum <- str_pad(monthNum, 2, 'left', '0')
       #testColumn <- c(testColumn, paste('2021-10/2021-', as.character(monthNum), sep=''))
       testColumn <- paste('2021-10/2021-', as.character(monthNum), sep='')
-      #ratios <- c(ratios, suburb[1, testColumn])
+      ratios <- c(ratios, suburb[1, testColumn])
       ratio <- suburb[1, testColumn]
       #histPricesSimple <- c(histPricesSimple, histPrices[j, 3])
       histPricesSimple <- c(histPricesSimple, ratio*histPrices[j, 'price'])
@@ -806,17 +807,25 @@ for(i in 1:nrow(newTestNew)) {
     else if(year >= 2012){
       #testColumn <- c(testColumn, paste('2021', year, sep='/'))
       testColumn <- paste('2021', year, sep='/')
-      #ratios <- c(ratios, suburb[1, testColumn])
+      ratios <- c(ratios, suburb[1, testColumn])
       ratio <- suburb[1, testColumn]
       #histPricesSimple <- c(histPricesSimple, histPrices[j, 3])
       histPricesSimple <- c(histPricesSimple, ratio*histPrices[j, 'price'])
     }
   }
   predHistoricalNew[rowInt, 'histPrices'] <- paste(histPricesSimple, collapse='/')
+  
+  weight <- 1/(length(ratios))
+  weight
+  predd <- 0
+  for(j in 1:length(ratios)) {
+   predd <- predd + (histPricesSimple[j]* weight)
+  }
+  predHistoricalNew[rowInt, 'predHist'] <- predd
 }
 
-joinedPreds <- merge(predictSelected, predHistoricalNew, by='index', all.x=T, all.y=F)
-joinedPreds <- subset(joinedPreds, select=c('index', 'pred', 'actual.x', 'histPrices'))
+joinedPreds <- merge(predictSelected, predHistoricalNew, by='index')
+joinedPreds <- subset(joinedPreds, select=c('index', 'pred', 'actual.x', 'histPrices', 'predHist'))
 
 # https://www.statology.org/how-to-rename-data-frame-columns-in-r/
 names(joinedPreds)[names(joinedPreds) == 'actual.x'] <- 'actual'
@@ -839,11 +848,16 @@ joinedPreds <- joinedPreds[ordered(joinedPreds$index), ]
 regressMSE <- mean((joinedPreds$pred - joinedPreds$actual)^2)
 regressRMSE <- sqrt(regressMSE)
 
+# Historical MSE, RMSE
+histMSE <- mean((joinedPreds$predHist - joinedPreds$actual)^2)
+histRMSE <- sqrt(histMSE)
+
 # Hybrid MSE, RMSE
 hybridMSE <- mean((joinedPreds$hybrid - joinedPreds$actual)^2)
 hybridRMSE <- sqrt(hybridMSE)
 
 regressRMSE
 hybridRMSE
+histRMSE
 
 sprintf('RMSE Difference: Regression Model - Hybrid: %f', (regressRMSE - hybridRMSE))
