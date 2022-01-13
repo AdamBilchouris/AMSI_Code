@@ -668,3 +668,182 @@ historicalRMSE
 # Historical, selected, interctions, ...
 min(basicRMSE, interactionsRMSE, squaredRMSE, basicSquaredRMSE, historicalRMSE, selectedRMSE)
 
+#======= Mean of historical and linear model =======
+# Get new samples. This removes the assumption that some might houses might have no historical sales.
+# This will never be the case as the data was cleaned.
+library(stringr)
+keepIndexNew <- c()
+for(i in 1:nrow(data)) {
+  # Check if the sale year is in 2021 and check between June and September 
+  yearKeep <- str_split(data[i, 'date'], '-')[[1]][3] == '2021'
+  month <- match(str_split(data[i, 'date'], '-')[[1]][2], month.abb)
+  monthKeep <- (month <= 9 && month >= 1)
+  histCount <- str_count(data[i, 'salesHistory'], '-')
+  #if(histCount < 1 || yearKeep == F || monthKeep == F) {
+  if(yearKeep == F || monthKeep == F) {
+    next
+  }
+  
+  histAbove <- 0
+  histPrices <- str_split(data[i, 'salesHistory'], '-')
+  for(j in 1:length(histPrices[[1]])) {
+    info <- str_split(histPrices[[1]][j], '/')[[1]]
+    saleMonth <- info[1]
+    monthNum <- match(saleMonth, month.abb)
+    saleYear <- as.numeric(info[2])
+    salePrice <- as.numeric(info[3])
+    if(monthNum >= 10 && saleYear == 2021) {
+      histAbove <- histAbove - 1 
+    }
+    if(saleYear < 2012) {
+      histAbove <- histAbove - 1
+    }
+    if(salePrice  < 5000) {
+      histAbove <- histAbove - 1
+    }
+    #if(monthNum < 10 && saleYear >= 2012 && saleYear <= 2021 && salePrice > 5000) { histAbove <- histAbove + 1}
+    else {
+      histAbove <- histAbove + 1
+    }
+  }
+  if(i == 1824 || i == 3763) {
+    # Can't seem to get rid of these two points. They are troublesome.
+    next
+  }
+  if(histAbove >= histCount) {
+    keepIndexNew <- c(keepIndexNew, i)
+  }
+}
+
+newTrainNew <- data5[-keepIndexNew, ]
+newTestNew <- data5[keepIndexNew, ]
+y <- 'price'
+formulaNew <-  paste0(".*. + I(", names(data5)[names(data5)!=y], "^2)+", collapse="") %>%
+  paste(y, "~", .) %>%
+  substr(., 1, nchar(.)-1) %>%
+  as.formula
+
+modNormalNew <- lm(formulaNew, data=newTrainNew)
+
+# Feature selection
+x <- model.matrix(modNormalNew)[, -1]
+str(x)
+y <- model.response(model.frame(modNormalNew))
+
+fitness <- function(s)
+{
+  inc <- which(s == 1)
+  X <- cbind(1, x[, inc])
+  mod <- lm.fit(X, y)
+  class(mod) <- 'lm'
+  -AIC(mod)
+}
+
+library(GA)
+GANew <- ga("binary", fitness=fitness, nBits=ncol(x),
+         names=colnames(x), monitor=plot, popSize=100)
+
+selectedGANew <- which(GANew@solution[1, ] == 1)
+selectedNamesGANew <- names(selectedGANew)
+
+formulaStrNew <- paste('price ~ ', selectedNamesGANew[1], sep='')
+for(i in 2:length(selectedNamesGA)) {
+  formulaStrNew <- paste(formulaStrNew, selectedNamesGANew[i], sep='+')
+}
+newFormulaNew <- as.formula(formulaStr)
+modSelectedNew <- lm(newFormulaNew, data=newTrainNew)
+
+predictSelected <- data.frame(pred=predict(modSelectedNew, newdata=newTestNew), actual=newTestNew$price, 
+                              index=as.numeric(rownames(newTestNew)), row.names=rownames(newTestNew))
+# MSE
+predictSelectedMSE <- mean((predictSelected$actual - predictSelected$pred)^2)
+predictSelectedRMSE <- sqrt(predictSelectedMSE)
+
+# Get the historical prices
+library(stringr)
+predHistoricalNew <- data.frame(actual=newTestNew$price, index=as.numeric(rownames(newTestNew)), row.names=rownames(newTestNew))
+for(i in 1:nrow(newTestNew)) {
+  testSample <- data[rownames(newTestNew[i, ]), ]
+  rowInt <- rownames(newTestNew[i, ])
+  #predHistoricalNew[rowInt, 'index'] <- testSample$index
+  suburb <- historical2[historical2$suburb == tolower(testSample$suburb), ]
+  histSales <- testSample$salesHistory
+  histSales2 <- str_split(histSales, '-')
+  histPrices <- data.frame()
+  for(j in 1:length(histSales2[[1]])) {
+    info <- str_split(histSales2[[1]][j], '/')[[1]]
+    # Skip over any sales less than $5000 in case a rental history snuck in.
+    if(as.numeric(info[3]) < 5000) {
+      next
+    }
+    #histPrices <- c(histPrices, c(info[1:3]))
+    histPrices[j, 'month'] <- info[1]
+    histPrices[j, 'year'] <- as.numeric(info[2])
+    histPrices[j, 'price'] <- as.numeric(info[3])
+  }
+  
+  histPrices
+  histPricesSimple <- c()
+  ratios <- c()
+  testColumn <- ''
+  for(j in 1:length(histPrices)) {
+    year <- histPrices[j, 'year']
+    if(is.na(year)) { next }
+    if(year == 2021) {
+      month <- histPrices[j, 'month']
+      #https://stackoverflow.com/questions/6549239/convert-months-mmm-to-numeric
+      monthNum <- match(month, month.abb)
+      # Add a 0 to the left if the month isn't 10
+      if(monthNum >= 10) { next }
+      monthNum <- str_pad(monthNum, 2, 'left', '0')
+      #testColumn <- c(testColumn, paste('2021-10/2021-', as.character(monthNum), sep=''))
+      testColumn <- paste('2021-10/2021-', as.character(monthNum), sep='')
+      #ratios <- c(ratios, suburb[1, testColumn])
+      ratio <- suburb[1, testColumn]
+      #histPricesSimple <- c(histPricesSimple, histPrices[j, 3])
+      histPricesSimple <- c(histPricesSimple, ratio*histPrices[j, 'price'])
+    }
+    else if(year >= 2012){
+      #testColumn <- c(testColumn, paste('2021', year, sep='/'))
+      testColumn <- paste('2021', year, sep='/')
+      #ratios <- c(ratios, suburb[1, testColumn])
+      ratio <- suburb[1, testColumn]
+      #histPricesSimple <- c(histPricesSimple, histPrices[j, 3])
+      histPricesSimple <- c(histPricesSimple, ratio*histPrices[j, 'price'])
+    }
+  }
+  predHistoricalNew[rowInt, 'histPrices'] <- paste(histPricesSimple, collapse='/')
+}
+
+joinedPreds <- merge(predictSelected, predHistoricalNew, by='index', all.x=T, all.y=F)
+joinedPreds <- subset(joinedPreds, select=c('index', 'pred', 'actual.x', 'histPrices'))
+
+# https://www.statology.org/how-to-rename-data-frame-columns-in-r/
+names(joinedPreds)[names(joinedPreds) == 'actual.x'] <- 'actual'
+
+for(i in 1:nrow(joinedPreds)) {
+  # Unpack historical prices
+  histPrices <- str_split(joinedPreds[i, 'histPrices'], '/')[[1]]
+  histPricesIndv <- c()
+  for(j in 1:length(histPrices)) {
+    histPricesIndv <- c(histPricesIndv, as.numeric(histPrices[j]))
+  }
+  predPrice <- joinedPreds[i, 'pred']
+  joinedPreds[i, 'hybrid'] <- mean(c(histPricesIndv, predPrice))
+}
+
+row.names(joinedPreds) <- joinedPreds$index
+joinedPreds <- joinedPreds[ordered(joinedPreds$index), ]
+
+# Regression MSE, RMSE
+regressMSE <- mean((joinedPreds$pred - joinedPreds$actual)^2)
+regressRMSE <- sqrt(regressMSE)
+
+# Hybrid MSE, RMSE
+hybridMSE <- mean((joinedPreds$hybrid - joinedPreds$actual)^2)
+hybridRMSE <- sqrt(hybridMSE)
+
+regressRMSE
+hybridRMSE
+
+sprintf('RMSE Difference: Regression Model - Hybrid: %f', (regressRMSE - hybridRMSE))
