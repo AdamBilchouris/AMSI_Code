@@ -820,7 +820,13 @@ for(i in 1:nrow(newTestNew)) {
       }
     }
   }
-  predHistoricalNew[rowInt, 'histPrices'] <- paste(histPricesSimple, collapse='/')
+  
+  if(length(histPricesSimple) == 0) {
+    predHistoricalNew[rowInt, 'histPrices'] <- paste('0')
+  }
+  else {
+    predHistoricalNew[rowInt, 'histPrices'] <- paste(histPricesSimple, collapse='/')
+  }
   
   weight <- 1/(length(ratios))
   weight
@@ -873,3 +879,109 @@ hybridRMSE
 histRMSE
 
 sprintf('RMSE Difference: Regression Model - Hybrid: %f', (regressRMSE - hybridRMSE))
+
+# Model with weights
+transformedDataTrain <- newTrainNew
+transformedDataTrain[, 'bin1'] <- 0
+transformedDataTrain[, 'bin2'] <- 0
+transformedDataTrain[, 'bin3'] <- 0
+transformedDataTrain[, 'bin4'] <- 0
+transformedDataTrain[, 'bin5'] <- 0
+
+library(stringr)
+for(i in 1:nrow(transformedDataTrain)) {
+  testSample <- data[rownames(transformedDataTrain[i, ]), ]
+  rowInt <- rownames(transformedDataTrain[i, ])
+  suburb <- historical2[historical2$suburb == tolower(testSample$suburb), ]
+  histSales <- testSample$salesHistory
+  histSales2 <- str_split(histSales, '-')
+  histPrices <- data.frame()
+  tempSalesYear <- c()
+  tempSalesPrice <- c()
+  for(j in 1:length(histSales2[[1]])) {
+    info <- str_split(histSales2[[1]][j], '/')[[1]]
+    # Skip over any sales less than $5000 in case a rental history snuck in.
+    if(as.numeric(info[3]) < 5000) {
+      next
+    }
+    
+    saleYear <- as.numeric(info[2])
+    salePrice <- as.numeric(info[3])
+    
+    if(saleYear < 2012) {
+      next
+    }
+    
+    tempSalesYear <- c(tempSalesYear, saleYear)
+    tempSalesPrice <- c(tempSalesPrice, salePrice)
+    
+    if(j == 1) {
+      histPrices[j, 'year'] <- saleYear
+      histPrices[j, 'price'] <- salePrice      
+    }
+    
+    bIndv <- F
+    if(j > 1) {
+      for(k in 1:length(tempSalesYear)) {
+        if(k == j) {
+          next
+        }
+        if(tempSalesYear[k] %in% c(2020, 2021) && saleYear %in% c(2020, 2021)) {
+          salePrice <- mean(c(tempSalesPrice[k], salePrice))
+          histPrices[k, 'price'] <- salePrice
+          histPrices[k, 'year'] <- tempSalesYear[k] 
+        }
+        else if(tempSalesYear[k] %in% c(2018, 2019) && saleYear %in% c(2018, 2019)) {
+          salePrice <- mean(c(tempSalesPrice[k], salePrice))
+          histPrices[k, 'price'] <- salePrice
+          histPrices[k, 'year'] <- tempSalesYear[k] 
+        }
+        else if(tempSalesYear[k] %in% c(2016, 2017) && saleYear %in% c(2016, 2017)) {
+          salePrice <- mean(c(tempSalesPrice[k], salePrice))
+          histPrices[k, 'price'] <- salePrice
+          histPrices[k, 'year'] <- tempSalesYear[k] 
+        }
+        else if(tempSalesYear[k] %in% c(2014, 2015) && saleYear %in% c(2014, 2015)) {
+          salePrice <- mean(c(tempSalesPrice[k], salePrice))
+          histPrices[k, 'price'] <- salePrice
+          histPrices[k, 'year'] <- tempSalesYear[k] 
+        }
+        else if(tempSalesYear[k] %in% c(2012, 2013) && saleYear %in% c(2012, 2013)) {
+          salePrice <- mean(c(tempSalesPrice[k], salePrice))
+          histPrices[k, 'price'] <- salePrice
+          histPrices[k, 'year'] <- tempSalesYear[k] 
+        }
+        else {
+          bIndv <- T
+        }
+      }
+    }
+    if(bIndv) {
+      histPrices[j, 'year'] <- saleYear
+      histPrices[j, 'price'] <- salePrice  
+    }
+  }
+  
+  if(length(histPrices) > 0) {
+    for(j in 1:length(histPrices)) {
+      year <- histPrices[j, 'year']
+      if(is.na(year)) { next }
+      if(year %in% c(2020, 2021)) {
+        transformedDataTrain[rowInt, 'bin5'] <- histPrices[j, 'price']
+      }
+      else if(year %in% c(2018, 2019)) {
+        transformedDataTrain[rowInt, 'bin4'] <- histPrices[j, 'price']
+      }
+      else if(year %in% c(2016, 2017)) {
+        transformedDataTrain[rowInt, 'bin3'] <- histPrices[j, 'price']
+      }
+      else if(year %in% c(2014, 2015)) {
+        transformedDataTrain[rowInt, 'bin2'] <- histPrices[j, 'price']
+      }
+      else if(year %in% c(2012, 2013)) {
+        transformedDataTrain[rowInt, 'bin1'] <- histPrices[j, 'price']
+      }
+    }
+  }
+}
+
