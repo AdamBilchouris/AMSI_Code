@@ -717,6 +717,11 @@ for(i in 1:nrow(data)) {
 
 newTrainNew <- data5[-keepIndexNew, ]
 newTestNew <- data5[keepIndexNew, ]
+
+#samplesNew <- sample(nrow(data5), nrow(data5)*0.6)
+#newTrainNew <- data5[samplesNew, ]
+#newTestNew <- data5[-samplesNew, ]
+
 y <- 'price'
 formulaNew <-  paste0(".*. + I(", names(data5)[names(data5)!=y], "^2)+", collapse="") %>%
   paste(y, "~", .) %>%
@@ -787,30 +792,32 @@ for(i in 1:nrow(newTestNew)) {
   histPricesSimple <- c()
   ratios <- c()
   testColumn <- ''
-  for(j in 1:length(histPrices)) {
-    year <- histPrices[j, 'year']
-    if(is.na(year)) { next }
-    if(year == 2021) {
-      month <- histPrices[j, 'month']
-      #https://stackoverflow.com/questions/6549239/convert-months-mmm-to-numeric
-      monthNum <- match(month, month.abb)
-      # Add a 0 to the left if the month isn't 10
-      if(monthNum >= 10) { next }
-      monthNum <- str_pad(monthNum, 2, 'left', '0')
-      #testColumn <- c(testColumn, paste('2021-10/2021-', as.character(monthNum), sep=''))
-      testColumn <- paste('2021-10/2021-', as.character(monthNum), sep='')
-      ratios <- c(ratios, suburb[1, testColumn])
-      ratio <- suburb[1, testColumn]
-      #histPricesSimple <- c(histPricesSimple, histPrices[j, 3])
-      histPricesSimple <- c(histPricesSimple, ratio*histPrices[j, 'price'])
-    }
-    else if(year >= 2012){
-      #testColumn <- c(testColumn, paste('2021', year, sep='/'))
-      testColumn <- paste('2021', year, sep='/')
-      ratios <- c(ratios, suburb[1, testColumn])
-      ratio <- suburb[1, testColumn]
-      #histPricesSimple <- c(histPricesSimple, histPrices[j, 3])
-      histPricesSimple <- c(histPricesSimple, ratio*histPrices[j, 'price'])
+  if(length(histPrices) > 0) {
+    for(j in 1:length(histPrices)) {
+      year <- histPrices[j, 'year']
+      if(is.na(year)) { next }
+      if(year == 2021) {
+        month <- histPrices[j, 'month']
+        #https://stackoverflow.com/questions/6549239/convert-months-mmm-to-numeric
+        monthNum <- match(month, month.abb)
+        # Add a 0 to the left if the month isn't 10
+        if(monthNum >= 10) { next }
+        monthNum <- str_pad(monthNum, 2, 'left', '0')
+        #testColumn <- c(testColumn, paste('2021-10/2021-', as.character(monthNum), sep=''))
+        testColumn <- paste('2021-10/2021-', as.character(monthNum), sep='')
+        ratios <- c(ratios, suburb[1, testColumn])
+        ratio <- suburb[1, testColumn]
+        #histPricesSimple <- c(histPricesSimple, histPrices[j, 3])
+        histPricesSimple <- c(histPricesSimple, ratio*histPrices[j, 'price'])
+      }
+      else if(year >= 2012){
+        #testColumn <- c(testColumn, paste('2021', year, sep='/'))
+        testColumn <- paste('2021', year, sep='/')
+        ratios <- c(ratios, suburb[1, testColumn])
+        ratio <- suburb[1, testColumn]
+        #histPricesSimple <- c(histPricesSimple, histPrices[j, 3])
+        histPricesSimple <- c(histPricesSimple, ratio*histPrices[j, 'price'])
+      }
     }
   }
   predHistoricalNew[rowInt, 'histPrices'] <- paste(histPricesSimple, collapse='/')
@@ -821,7 +828,12 @@ for(i in 1:nrow(newTestNew)) {
   for(j in 1:length(ratios)) {
    predd <- predd + (histPricesSimple[j]* weight)
   }
-  predHistoricalNew[rowInt, 'predHist'] <- predd
+  if(length(predd) == 0) {
+    predHistoricalNew[rowInt, 'predHist'] <- 0
+  }
+  else {
+    predHistoricalNew[rowInt, 'predHist'] <- predd
+  }
 }
 
 joinedPreds <- merge(predictSelected, predHistoricalNew, by='index')
