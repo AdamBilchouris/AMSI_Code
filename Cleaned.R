@@ -985,3 +985,105 @@ for(i in 1:nrow(transformedDataTrain)) {
   }
 }
 
+transformedDataTest <- newTestNew
+transformedDataTest[, 'bin1'] <- 0
+transformedDataTest[, 'bin2'] <- 0
+transformedDataTest[, 'bin3'] <- 0
+transformedDataTest[, 'bin4'] <- 0
+transformedDataTest[, 'bin5'] <- 0
+
+for(i in 1:nrow(transformedDataTest)) {
+  testSample <- data[rownames(transformedDataTest[i, ]), ]
+  rowInt <- rownames(transformedDataTest[i, ])
+  suburb <- historical2[historical2$suburb == tolower(testSample$suburb), ]
+  histSales <- testSample$salesHistory
+  histSales2 <- str_split(histSales, '-')
+  histPrices <- data.frame()
+  tempSalesYear <- c()
+  tempSalesPrice <- c()
+  for(j in 1:length(histSales2[[1]])) {
+    info <- str_split(histSales2[[1]][j], '/')[[1]]
+    # Skip over any sales less than $5000 in case a rental history snuck in.
+    if(as.numeric(info[3]) < 5000) {
+      next
+    }
+    
+    saleYear <- as.numeric(info[2])
+    salePrice <- as.numeric(info[3])
+    
+    if(saleYear < 2012) {
+      next
+    }
+    
+    tempSalesYear <- c(tempSalesYear, saleYear)
+    tempSalesPrice <- c(tempSalesPrice, salePrice)
+    
+    if(j == 1) {
+      histPrices[j, 'year'] <- saleYear
+      histPrices[j, 'price'] <- salePrice      
+    }
+    
+    bIndv <- F
+    if(j > 1) {
+      for(k in 1:length(tempSalesYear)) {
+        if(k == j) {
+          next
+        }
+        if(tempSalesYear[k] %in% c(2020, 2021) && saleYear %in% c(2020, 2021)) {
+          salePrice <- mean(c(tempSalesPrice[k], salePrice))
+          histPrices[k, 'price'] <- salePrice
+          histPrices[k, 'year'] <- tempSalesYear[k] 
+        }
+        else if(tempSalesYear[k] %in% c(2018, 2019) && saleYear %in% c(2018, 2019)) {
+          salePrice <- mean(c(tempSalesPrice[k], salePrice))
+          histPrices[k, 'price'] <- salePrice
+          histPrices[k, 'year'] <- tempSalesYear[k] 
+        }
+        else if(tempSalesYear[k] %in% c(2016, 2017) && saleYear %in% c(2016, 2017)) {
+          salePrice <- mean(c(tempSalesPrice[k], salePrice))
+          histPrices[k, 'price'] <- salePrice
+          histPrices[k, 'year'] <- tempSalesYear[k] 
+        }
+        else if(tempSalesYear[k] %in% c(2014, 2015) && saleYear %in% c(2014, 2015)) {
+          salePrice <- mean(c(tempSalesPrice[k], salePrice))
+          histPrices[k, 'price'] <- salePrice
+          histPrices[k, 'year'] <- tempSalesYear[k] 
+        }
+        else if(tempSalesYear[k] %in% c(2012, 2013) && saleYear %in% c(2012, 2013)) {
+          salePrice <- mean(c(tempSalesPrice[k], salePrice))
+          histPrices[k, 'price'] <- salePrice
+          histPrices[k, 'year'] <- tempSalesYear[k] 
+        }
+        else {
+          bIndv <- T
+        }
+      }
+    }
+    if(bIndv) {
+      histPrices[j, 'year'] <- saleYear
+      histPrices[j, 'price'] <- salePrice  
+    }
+  }
+  
+  if(length(histPrices) > 0) {
+    for(j in 1:length(histPrices)) {
+      year <- histPrices[j, 'year']
+      if(is.na(year)) { next }
+      if(year %in% c(2020, 2021)) {
+        transformedDataTest[rowInt, 'bin5'] <- histPrices[j, 'price']
+      }
+      else if(year %in% c(2018, 2019)) {
+        transformedDataTest[rowInt, 'bin4'] <- histPrices[j, 'price']
+      }
+      else if(year %in% c(2016, 2017)) {
+        transformedDataTest[rowInt, 'bin3'] <- histPrices[j, 'price']
+      }
+      else if(year %in% c(2014, 2015)) {
+        transformedDataTest[rowInt, 'bin2'] <- histPrices[j, 'price']
+      }
+      else if(year %in% c(2012, 2013)) {
+        transformedDataTest[rowInt, 'bin1'] <- histPrices[j, 'price']
+      }
+    }
+  }
+}
