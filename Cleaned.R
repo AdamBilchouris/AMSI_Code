@@ -1087,3 +1087,13 @@ for(i in 1:nrow(transformedDataTest)) {
     }
   }
 }
+
+# Add indicators
+transformedDataTrain2 <- transformedDataTrain 
+for(i in 1:5) {
+  bB <- paste0('bBin', i)
+  b <- paste0('bin', i)
+  transformedDataTrain2[, bB] <- apply(transformedDataTrain2, 1,
+                                     FUN=function(x) if(x[b] == 0) 0 else 1)
+}
+
