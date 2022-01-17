@@ -755,7 +755,7 @@ formulaStrNew <- paste('price ~ ', selectedNamesGANew[1], sep='')
 for(i in 2:length(selectedNamesGA)) {
   formulaStrNew <- paste(formulaStrNew, selectedNamesGANew[i], sep='+')
 }
-newFormulaNew <- as.formula(formulaStr)
+newFormulaNew <- as.formula(formulaStrNew)
 modSelectedNew <- lm(newFormulaNew, data=newTrainNew)
 
 predictSelected <- data.frame(pred=predict(modSelectedNew, newdata=newTestNew), actual=newTestNew$price, 
@@ -879,6 +879,7 @@ hybridRMSE
 histRMSE
 
 sprintf('RMSE Difference: Regression Model - Hybrid: %f', (regressRMSE - hybridRMSE))
+sprintf('RMSE Difference: Historical - Hybrid: %f', (histRMSE - hybridRMSE))
 
 # Model with weights
 transformedDataTrain <- newTrainNew
@@ -887,6 +888,31 @@ transformedDataTrain[, 'bin2'] <- 0
 transformedDataTrain[, 'bin3'] <- 0
 transformedDataTrain[, 'bin4'] <- 0
 transformedDataTrain[, 'bin5'] <- 0
+
+
+getRatio <- function(month, year, suburb) {
+  ratio <- 1
+  if(is.na(year)) { 
+    return(ratio)
+  }
+  if(year == 2021) {
+    #https://stackoverflow.com/questions/6549239/convert-months-mmm-to-numeric
+    monthNum <- match(month, month.abb)
+    # Add a 0 to the left if the month isn't 10
+    if(monthNum >= 10) {
+      return(ratio)
+    }
+    monthNum <- str_pad(monthNum, 2, 'left', '0')
+    testColumn <- paste('2021-10/2021-', as.character(monthNum), sep='')
+    ratio <- suburb[1, testColumn]
+  }
+  else if(year >= 2012){
+    testColumn <- paste('2021', year, sep='/')
+    ratio <- suburb[1, testColumn]
+  }
+  
+  ratio
+}
 
 library(stringr)
 for(i in 1:nrow(transformedDataTrain)) {
@@ -905,6 +931,7 @@ for(i in 1:nrow(transformedDataTrain)) {
       next
     }
     
+    saleMonth <- info[1]
     saleYear <- as.numeric(info[2])
     salePrice <- as.numeric(info[3])
     
@@ -916,8 +943,9 @@ for(i in 1:nrow(transformedDataTrain)) {
     tempSalesPrice <- c(tempSalesPrice, salePrice)
     
     if(j == 1) {
+      ratio <- getRatio(saleMonth, saleYear, suburb)
       histPrices[j, 'year'] <- saleYear
-      histPrices[j, 'price'] <- salePrice      
+      histPrices[j, 'price'] <- (salePrice*as.numeric(ratio))
     }
     
     bIndv <- F
@@ -926,28 +954,34 @@ for(i in 1:nrow(transformedDataTrain)) {
         if(k == j) {
           next
         }
+        ratio <- getRatio(saleMonth, saleYear, suburb)
         if(tempSalesYear[k] %in% c(2020, 2021) && saleYear %in% c(2020, 2021)) {
-          salePrice <- mean(c(tempSalesPrice[k], salePrice))
+          adjSalePrice <- (salePrice*as.numeric(ratio))
+          salePrice <- mean(c(tempSalesPrice[k], adjSalePrice))
           histPrices[k, 'price'] <- salePrice
           histPrices[k, 'year'] <- tempSalesYear[k] 
         }
         else if(tempSalesYear[k] %in% c(2018, 2019) && saleYear %in% c(2018, 2019)) {
-          salePrice <- mean(c(tempSalesPrice[k], salePrice))
+          adjSalePrice <- (salePrice*as.numeric(ratio))
+          salePrice <- mean(c(tempSalesPrice[k], adjSalePrice))
           histPrices[k, 'price'] <- salePrice
           histPrices[k, 'year'] <- tempSalesYear[k] 
         }
         else if(tempSalesYear[k] %in% c(2016, 2017) && saleYear %in% c(2016, 2017)) {
-          salePrice <- mean(c(tempSalesPrice[k], salePrice))
+          adjSalePrice <- (salePrice*as.numeric(ratio))
+          salePrice <- mean(c(tempSalesPrice[k], adjSalePrice))
           histPrices[k, 'price'] <- salePrice
           histPrices[k, 'year'] <- tempSalesYear[k] 
         }
         else if(tempSalesYear[k] %in% c(2014, 2015) && saleYear %in% c(2014, 2015)) {
-          salePrice <- mean(c(tempSalesPrice[k], salePrice))
+          adjSalePrice <- (salePrice*as.numeric(ratio))
+          salePrice <- mean(c(tempSalesPrice[k], adjSalePrice))
           histPrices[k, 'price'] <- salePrice
           histPrices[k, 'year'] <- tempSalesYear[k] 
         }
         else if(tempSalesYear[k] %in% c(2012, 2013) && saleYear %in% c(2012, 2013)) {
-          salePrice <- mean(c(tempSalesPrice[k], salePrice))
+          adjSalePrice <- (salePrice*as.numeric(ratio))
+          salePrice <- mean(c(tempSalesPrice[k], adjSalePrice))
           histPrices[k, 'price'] <- salePrice
           histPrices[k, 'year'] <- tempSalesYear[k] 
         }
@@ -957,8 +991,9 @@ for(i in 1:nrow(transformedDataTrain)) {
       }
     }
     if(bIndv) {
+      ratio <- getRatio(saleMonth, saleYear, suburb)
       histPrices[j, 'year'] <- saleYear
-      histPrices[j, 'price'] <- salePrice  
+      histPrices[j, 'price'] <- (salePrice*as.numeric(ratio))
     }
   }
   
@@ -1008,6 +1043,7 @@ for(i in 1:nrow(transformedDataTest)) {
       next
     }
     
+    saleMonth <- info[1]
     saleYear <- as.numeric(info[2])
     salePrice <- as.numeric(info[3])
     
@@ -1019,6 +1055,7 @@ for(i in 1:nrow(transformedDataTest)) {
     tempSalesPrice <- c(tempSalesPrice, salePrice)
     
     if(j == 1) {
+      ratio <- getRatio(saleMonth, saleYear, suburb)
       histPrices[j, 'year'] <- saleYear
       histPrices[j, 'price'] <- salePrice      
     }
@@ -1029,28 +1066,34 @@ for(i in 1:nrow(transformedDataTest)) {
         if(k == j) {
           next
         }
+        ratio <- getRatio(saleMonth, saleYear, suburb)
         if(tempSalesYear[k] %in% c(2020, 2021) && saleYear %in% c(2020, 2021)) {
-          salePrice <- mean(c(tempSalesPrice[k], salePrice))
+          adjSalePrice <- (salePrice*as.numeric(ratio))
+          salePrice <- mean(c(tempSalesPrice[k], adjSalePrice))
           histPrices[k, 'price'] <- salePrice
           histPrices[k, 'year'] <- tempSalesYear[k] 
         }
         else if(tempSalesYear[k] %in% c(2018, 2019) && saleYear %in% c(2018, 2019)) {
-          salePrice <- mean(c(tempSalesPrice[k], salePrice))
+          adjSalePrice <- (salePrice*as.numeric(ratio))
+          salePrice <- mean(c(tempSalesPrice[k], adjSalePrice))
           histPrices[k, 'price'] <- salePrice
           histPrices[k, 'year'] <- tempSalesYear[k] 
         }
         else if(tempSalesYear[k] %in% c(2016, 2017) && saleYear %in% c(2016, 2017)) {
-          salePrice <- mean(c(tempSalesPrice[k], salePrice))
+          adjSalePrice <- (salePrice*as.numeric(ratio))
+          salePrice <- mean(c(tempSalesPrice[k], adjSalePrice))
           histPrices[k, 'price'] <- salePrice
           histPrices[k, 'year'] <- tempSalesYear[k] 
         }
         else if(tempSalesYear[k] %in% c(2014, 2015) && saleYear %in% c(2014, 2015)) {
-          salePrice <- mean(c(tempSalesPrice[k], salePrice))
+          adjSalePrice <- (salePrice*as.numeric(ratio))
+          salePrice <- mean(c(tempSalesPrice[k], adjSalePrice))
           histPrices[k, 'price'] <- salePrice
           histPrices[k, 'year'] <- tempSalesYear[k] 
         }
         else if(tempSalesYear[k] %in% c(2012, 2013) && saleYear %in% c(2012, 2013)) {
-          salePrice <- mean(c(tempSalesPrice[k], salePrice))
+          adjSalePrice <- (salePrice*as.numeric(ratio))
+          salePrice <- mean(c(tempSalesPrice[k], ajdSalePrice))
           histPrices[k, 'price'] <- salePrice
           histPrices[k, 'year'] <- tempSalesYear[k] 
         }
@@ -1090,10 +1133,37 @@ for(i in 1:nrow(transformedDataTest)) {
 
 # Add indicators
 transformedDataTrain2 <- transformedDataTrain 
+transformedDataTest2 <- transformedDataTest
 for(i in 1:5) {
   bB <- paste0('bBin', i)
   b <- paste0('bin', i)
   transformedDataTrain2[, bB] <- apply(transformedDataTrain2, 1,
                                      FUN=function(x) if(x[b] == 0) 0 else 1)
+  transformedDataTest2[, bB] <- apply(transformedDataTest2, 1,
+                                     FUN=function(x) if(x[b] == 0) 0 else 1)
 }
+
+# Chosen arbitrarily
+wtFn <- function(x) {
+  (9/10) * exp(-x/5)
+}
+
+# pr = regression price
+# phi = price historical for the bins
+# pa = actual price of the house
+# w = weights, to be estimated
+#     1:   Regression weight
+#     2:6: The weights per bin
+# iphi: Indicator, if the historical price even exists.
+# How to get w?
+fancyFormula <- function(pr, phi, pa, iphi, w) {
+  (w[1]*pr + w[2]*phi[1] + w[3]*phi[2] + w[4]*phi[3] + w[5]*phi[4] + w[6]*phi[5]) /  (w[1] + sum(w[2:6]*iphi))
+}
+
+fancyFormula(joinedPreds['9', 'pred'], as.numeric(transformedDataTest2['9', 14:18]), joinedPreds['9', 'actual'],
+             as.numeric(transformedDataTest2['1', 19:23]), c(0.1, 0.2, 0.2, 0.2, 0.2, 0.3))
+
+(0.1*joinedPreds['9', 'pred'] + 0.2*transformedDataTest2['9', 14] + 0.2*transformedDataTest2['9', 15] +
+    0.2*transformedDataTest2['9', 16] + 0.2*transformedDataTest2['9', 17] + 0.3*transformedDataTest2['9', 18]) /
+  (0.1 + (sum(c(0.2, 0.2, 0.2, 0.2, 0.3)*unlist(transformedDataTest2['9', 19:23]))))
 
