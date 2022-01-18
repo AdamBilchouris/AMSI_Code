@@ -78,6 +78,7 @@ newTestNew <- data5[keepIndexNew, ]
 #newTrainNew <- data5[samplesNew, ]
 #newTestNew <- data5[-samplesNew, ]
 
+library(dplyr)
 y <- 'price'
 formulaNew <-  paste0(".*. + I(", names(data5)[names(data5)!=y], "^2)+", collapse="") %>%
   paste(y, "~", .) %>%
