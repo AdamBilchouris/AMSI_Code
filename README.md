@@ -2,10 +2,10 @@
 
 ## Files
 * Cleaner.R
-** This file contains code to produce the three models.
+    * This file contains code to produce the three models.
 
 * Cleaned.R
-** This file contains code to produce the above, as well as an isolation forest for anomaly detection. It also tests these.
+    * This file contains code to produce the above, as well as an isolation forest for anomaly detection. It also tests these.
 
 ## Required Libraries
 ```{R}
