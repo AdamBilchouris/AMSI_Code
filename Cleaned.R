@@ -760,6 +760,8 @@ modSelectedNew <- lm(newFormulaNew, data=newTrainNew)
 
 predictSelected <- data.frame(pred=predict(modSelectedNew, newdata=newTestNew), actual=newTestNew$price, 
                               index=as.numeric(rownames(newTestNew)), row.names=rownames(newTestNew))
+
+
 # MSE
 predictSelectedMSE <- mean((predictSelected$actual - predictSelected$pred)^2)
 predictSelectedRMSE <- sqrt(predictSelectedMSE)
@@ -881,6 +883,85 @@ histRMSE
 sprintf('RMSE Difference: Regression Model - Hybrid: %f', (regressRMSE - hybridRMSE))
 sprintf('RMSE Difference: Historical - Hybrid: %f', (histRMSE - hybridRMSE))
 
+# Training Data to predict weights
+predictSelectedTrain <- data.frame(pred=predict(modSelectedNew, newdata=newTrainNew), actual=newTrainNew$price, 
+                              index=as.numeric(rownames(newTrainNew)), row.names=rownames(newTrainNew))
+
+predHistoricalNew <- data.frame(actual=newTrainNew$price, index=as.numeric(rownames(newTrainNew)), row.names=rownames(newTrainNew))
+for(i in 1:nrow(newTrainNew)) {
+  testSample <- data[rownames(newTrainNew[i, ]), ]
+  rowInt <- rownames(newTrainNew[i, ])
+  suburb <- historical2[historical2$suburb == tolower(testSample$suburb), ]
+  histSales <- testSample$salesHistory
+  histSales2 <- str_split(histSales, '-')
+  histPrices <- data.frame()
+  for(j in 1:length(histSales2[[1]])) {
+    info <- str_split(histSales2[[1]][j], '/')[[1]]
+    # Skip over any sales less than $5000 in case a rental history snuck in.
+    if(as.numeric(info[3]) < 5000) {
+      next
+    }
+    histPrices[j, 'month'] <- info[1]
+    histPrices[j, 'year'] <- as.numeric(info[2])
+    histPrices[j, 'price'] <- as.numeric(info[3])
+  }
+  
+  histPrices
+  histPricesSimple <- c()
+  ratios <- c()
+  testColumn <- ''
+  if(length(histPrices) > 0) {
+    for(j in 1:length(histPrices)) {
+      year <- histPrices[j, 'year']
+      if(is.na(year)) { next }
+      if(year == 2021) {
+        month <- histPrices[j, 'month']
+        #https://stackoverflow.com/questions/6549239/convert-months-mmm-to-numeric
+        monthNum <- match(month, month.abb)
+        # Add a 0 to the left if the month isn't 10
+        if(monthNum >= 10) { next }
+        monthNum <- str_pad(monthNum, 2, 'left', '0')
+        testColumn <- paste('2021-10/2021-', as.character(monthNum), sep='')
+        ratios <- c(ratios, suburb[1, testColumn])
+        ratio <- suburb[1, testColumn]
+        histPricesSimple <- c(histPricesSimple, ratio*histPrices[j, 'price'])
+      }
+      else if(year >= 2012){
+        #testColumn <- c(testColumn, paste('2021', year, sep='/'))
+        testColumn <- paste('2021', year, sep='/')
+        ratios <- c(ratios, suburb[1, testColumn])
+        ratio <- suburb[1, testColumn]
+        histPricesSimple <- c(histPricesSimple, ratio*histPrices[j, 'price'])
+      }
+    }
+  }
+  
+  if(length(histPricesSimple) == 0) {
+    predHistoricalNew[rowInt, 'histPrices'] <- paste('0')
+  }
+  else {
+    predHistoricalNew[rowInt, 'histPrices'] <- paste(histPricesSimple, collapse='/')
+  }
+  
+  weight <- 1/(length(ratios))
+  weight
+  predd <- 0
+  for(j in 1:length(ratios)) {
+   predd <- predd + (histPricesSimple[j]* weight)
+  }
+  if(length(predd) == 0) {
+    predHistoricalNew[rowInt, 'predHist'] <- 0
+  }
+  else {
+    predHistoricalNew[rowInt, 'predHist'] <- predd
+  }
+}
+
+joinedPredsTrain <- merge(predictSelectedTrain, predHistoricalNew, by='index')
+joinedPredsTrain <- subset(joinedPredsTrain, select=c('index', 'pred', 'actual.x', 'histPrices', 'predHist'))
+
+names(joinedPredsTrain)[names(joinedPredsTrain) == 'actual.x'] <- 'actual'
+
 # Model with weights
 transformedDataTrain <- newTrainNew
 transformedDataTrain[, 'bin1'] <- 0
@@ -888,7 +969,6 @@ transformedDataTrain[, 'bin2'] <- 0
 transformedDataTrain[, 'bin3'] <- 0
 transformedDataTrain[, 'bin4'] <- 0
 transformedDataTrain[, 'bin5'] <- 0
-
 
 getRatio <- function(month, year, suburb) {
   ratio <- 1
@@ -1159,11 +1239,61 @@ wtFn <- function(x) {
 fancyFormula <- function(pr, phi, pa, iphi, w) {
   (w[1]*pr + w[2]*phi[1] + w[3]*phi[2] + w[4]*phi[3] + w[5]*phi[4] + w[6]*phi[5]) /  (w[1] + sum(w[2:6]*iphi))
 }
+#
+#fancyFormula(joinedPreds['9', 'pred'], as.numeric(transformedDataTest2['9', 14:18]), joinedPreds['9', 'actual'],
+#             as.numeric(transformedDataTest2['9', 19:23]), c(0.1, 0.2, 0.2, 0.2, 0.2, 0.3))
+#
+#(0.1*joinedPreds['9', 'pred'] + 0.2*transformedDataTest2['9', 14] + 0.2*transformedDataTest2['9', 15] +
+#    0.2*transformedDataTest2['9', 16] + 0.2*transformedDataTest2['9', 17] + 0.3*transformedDataTest2['9', 18]) /
+#  (0.1 + (sum(c(0.2, 0.2, 0.2, 0.2, 0.3)*unlist(transformedDataTest2['9', 19:23]))))
 
-fancyFormula(joinedPreds['9', 'pred'], as.numeric(transformedDataTest2['9', 14:18]), joinedPreds['9', 'actual'],
-             as.numeric(transformedDataTest2['1', 19:23]), c(0.1, 0.2, 0.2, 0.2, 0.2, 0.3))
+jp <- joinedPredsTrain
+tdt2 <- transformedDataTrain2
+fancyFormulaMSE <- function(w) {
+  mean(
+    (
+      jp$actual - ((w[1]*jp$pred + w[2]*tdt2$bin1 + w[3]*tdt2$bin2 + w[4]*tdt2$bin3 + w[5]*tdt2$bin4 + w[6]*tdt2$bin5) / 
+                 (w[1] + w[2]*tdt2$bBin1 + w[3]*tdt2$bBin2 + w[4]*tdt2$bBin3 + w[5]*tdt2$bBin4 + w[6]*tdt2$bBin5))
+    )^2
+  )
+}
 
-(0.1*joinedPreds['9', 'pred'] + 0.2*transformedDataTest2['9', 14] + 0.2*transformedDataTest2['9', 15] +
-    0.2*transformedDataTest2['9', 16] + 0.2*transformedDataTest2['9', 17] + 0.3*transformedDataTest2['9', 18]) /
-  (0.1 + (sum(c(0.2, 0.2, 0.2, 0.2, 0.3)*unlist(transformedDataTest2['9', 19:23]))))
+aaa <- optim(c(0.1, 0.1, 0.2, 0.2, 0.2, 0.2), fancyFormulaMSE, method='L-BFGS-B', lower=rep(0, 6), upper=rep(1, 6))
+aaa$par
+ww <- aaa$par/sum(aaa$par)
+ww
+sum(ww)
 
+fancyFormula(joinedPreds['13', 'pred'], as.numeric(transformedDataTest2['13', 14:18]), joinedPreds['13', 'actual'],
+             as.numeric(transformedDataTest2['13', 19:23]), ww)
+joinedPreds['9', 'actual']
+
+fancyFormula(joinedPreds['1', 'pred'], as.numeric(transformedDataTest2['1', 14:18]), joinedPreds['1', 'actual'],
+             as.numeric(transformedDataTest2['1', 19:23]), ww)
+joinedPreds['1', 'actual']
+
+jpT <- joinedPreds
+tdt2T <- transformedDataTest2
+for(i in 1:nrow(jpT))
+{
+  pr <- jpT[i, 'pred']
+  phi <- as.numeric(tdt2T[i, 14:18])
+  pa <- jpT[i, 'actual']
+  iphi <- as.numeric(tdt2T[i, 19:23])
+  res <- fancyFormula(pr, phi, pa, iphi, ww)
+  jpT[i, 'fancy'] <- res
+}
+
+fancyMSE <- mean((jpT$actual - jpT$fancy)^2)
+fancyRMSE <- sqrt(fancyMSE)
+fancyMSE
+fancyRMSE
+
+sprintf('RMSE Difference: Regression Model - Historical: %f', (regressRMSE - histRMSE))
+sprintf('RMSE Difference: Regression Model - Hybrid Mean: %f', (regressRMSE - hybridRMSE))
+sprintf('RMSE Difference: Regression Model - Hybrid Fancy: %f', (regressRMSE - fancyRMSE))
+
+sprintf('RMSE Difference: Historical - Hybrid Mean: %f', (histRMSE - hybridRMSE))
+sprintf('RMSE Difference: Historical - Hybrid Fancy: %f', (histRMSE - fancyRMSE))
+
+sprintf('RMSE Difference: Hybrid Mean - Hybrid Fancy: %f', (hybridRMSE - fancyRMSE))
