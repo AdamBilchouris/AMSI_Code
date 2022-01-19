@@ -24,7 +24,7 @@ data4 <- merge(x=data3, y=crimeSum, by='suburb', all.x=T)
 # No crime
 data5 <- data4[, c(2:7, 11:14, 17:19)]
 
-#======== Models
+#======== Models =========
 # Get new samples. This removes the assumption that some might houses might have no historical sales.
 # This will never be the case as the data was cleaned.
 library(stringr)
@@ -71,12 +71,12 @@ for(i in 1:nrow(data)) {
   }
 }
 
-newTrainNew <- data5[-keepIndexNew, ]
-newTestNew <- data5[keepIndexNew, ]
+train <- data5[-keepIndexNew, ]
+test <- data5[keepIndexNew, ]
 
 #samplesNew <- sample(nrow(data5), nrow(data5)*0.6)
-#newTrainNew <- data5[samplesNew, ]
-#newTestNew <- data5[-samplesNew, ]
+#train <- data5[samplesNew, ]
+#test <- data5[-samplesNew, ]
 
 library(dplyr)
 y <- 'price'
@@ -85,7 +85,7 @@ formulaNew <-  paste0(".*. + I(", names(data5)[names(data5)!=y], "^2)+", collaps
   substr(., 1, nchar(.)-1) %>%
   as.formula
 
-modNormalNew <- lm(formulaNew, data=newTrainNew)
+modNormalNew <- lm(formulaNew, data=train)
 
 # Feature selection
 x <- model.matrix(modNormalNew)[, -1]
@@ -113,10 +113,10 @@ for(i in 2:length(selectedNamesGANew)) {
   formulaStrNew <- paste(formulaStrNew, selectedNamesGANew[i], sep='+')
 }
 newFormulaNew <- as.formula(formulaStrNew)
-modSelectedNew <- lm(newFormulaNew, data=newTrainNew)
+modSelectedNew <- lm(newFormulaNew, data=train)
 
-predictSelected <- data.frame(pred=predict(modSelectedNew, newdata=newTestNew), actual=newTestNew$price, 
-                              index=as.numeric(rownames(newTestNew)), row.names=rownames(newTestNew))
+predictSelected <- data.frame(pred=predict(modSelectedNew, newdata=test), actual=test$price, 
+                              index=as.numeric(rownames(test)), row.names=rownames(test))
 
 
 # MSE
@@ -126,10 +126,10 @@ predictSelectedRMSE <- sqrt(predictSelectedMSE)
 # Get the historical prices
 library(stringr)
 historical2 <- read.csv('hist.csv', check.names=F)
-predHistoricalNew <- data.frame(actual=newTestNew$price, index=as.numeric(rownames(newTestNew)), row.names=rownames(newTestNew))
-for(i in 1:nrow(newTestNew)) {
-  testSample <- data[rownames(newTestNew[i, ]), ]
-  rowInt <- rownames(newTestNew[i, ])
+predHistoricalNew <- data.frame(actual=test$price, index=as.numeric(rownames(test)), row.names=rownames(test))
+for(i in 1:nrow(test)) {
+  testSample <- data[rownames(test[i, ]), ]
+  rowInt <- rownames(test[i, ])
   #predHistoricalNew[rowInt, 'index'] <- testSample$index
   suburb <- historical2[historical2$suburb == tolower(testSample$suburb), ]
   histSales <- testSample$salesHistory
@@ -241,13 +241,13 @@ sprintf('RMSE Difference: Regression Model - Hybrid: %f', (regressRMSE - hybridR
 sprintf('RMSE Difference: Historical - Hybrid: %f', (histRMSE - hybridRMSE))
 
 # Training Data to predict weights
-predictSelectedTrain <- data.frame(pred=predict(modSelectedNew, newdata=newTrainNew), actual=newTrainNew$price, 
-                              index=as.numeric(rownames(newTrainNew)), row.names=rownames(newTrainNew))
+predictSelectedTrain <- data.frame(pred=predict(modSelectedNew, newdata=train), actual=train$price, 
+                              index=as.numeric(rownames(train)), row.names=rownames(train))
 
-predHistoricalNew <- data.frame(actual=newTrainNew$price, index=as.numeric(rownames(newTrainNew)), row.names=rownames(newTrainNew))
-for(i in 1:nrow(newTrainNew)) {
-  testSample <- data[rownames(newTrainNew[i, ]), ]
-  rowInt <- rownames(newTrainNew[i, ])
+predHistoricalNew <- data.frame(actual=train$price, index=as.numeric(rownames(train)), row.names=rownames(train))
+for(i in 1:nrow(train)) {
+  testSample <- data[rownames(train[i, ]), ]
+  rowInt <- rownames(train[i, ])
   suburb <- historical2[historical2$suburb == tolower(testSample$suburb), ]
   histSales <- testSample$salesHistory
   histSales2 <- str_split(histSales, '-')
@@ -320,7 +320,7 @@ joinedPredsTrain <- subset(joinedPredsTrain, select=c('index', 'pred', 'actual.x
 names(joinedPredsTrain)[names(joinedPredsTrain) == 'actual.x'] <- 'actual'
 
 # Model with weights
-transformedDataTrain <- newTrainNew
+transformedDataTrain <- train
 transformedDataTrain[, 'bin1'] <- 0
 transformedDataTrain[, 'bin2'] <- 0
 transformedDataTrain[, 'bin3'] <- 0
@@ -457,7 +457,7 @@ for(i in 1:nrow(transformedDataTrain)) {
   }
 }
 
-transformedDataTest <- newTestNew
+transformedDataTest <- test
 transformedDataTest[, 'bin1'] <- 0
 transformedDataTest[, 'bin2'] <- 0
 transformedDataTest[, 'bin3'] <- 0
@@ -647,3 +647,323 @@ sprintf('RMSE Difference: Historical - Hybrid Mean: %f', (histRMSE - hybridRMSE)
 sprintf('RMSE Difference: Historical - Hybrid Fancy: %f', (histRMSE - fancyRMSE))
 
 sprintf('RMSE Difference: Hybrid Mean - Hybrid Fancy: %f', (hybridRMSE - fancyRMSE))
+
+#====== Isolation Forest ======
+library(isotree)
+isoForest <- isolation.forest(train[, c(2:13)], ntrees=1000)
+
+isoPredTrain <- predict(isoForest, train[, c(2:13)])
+predDfTrain <- data.frame(isoPredTrain)
+names(predDfTrain)[names(predDfTrain) == 'isoPredTrain'] <- 'pred'
+predDfTrain[, 'index'] <- rownames(predDfTrain)
+predDfTrainFilter <- predDfTrain[predDfTrain['pred'] > 0.60, ]
+orderedTrain <- predDfTrainFilter[order(predDfTrainFilter[, 'pred'], decreasing=T),]
+indicesTrain <- c(orderedTrain$index)
+dTrain <- data[unlist(indicesTrain), ]
+dTrain['pred'] <- orderedTrain$pred
+dTrain <- dTrain[, c(1, 3, 5:8, 15, 18)]
+knitr::kable(dTrain)
+
+isoPredTest <- predict(isoForest, test[, c(2:13)])
+predDfTest <- data.frame(isoPredTest)
+names(predDfTest)[names(predDfTest) == 'isoPredTest'] <- 'pred'
+predDfTest[, 'index'] <- rownames(predDfTest)
+predDfTestFilter <- predDfTest[predDfTest['pred'] > 0.6, ]
+orderedTest <- predDfTestFilter[order(predDfTestFilter[, 'pred'], decreasing=T),]
+indicesTest <- c(orderedTest$index)
+dTest <- data[unlist(indicesTest), ]
+dTest['pred'] <- orderedTest$pred
+dTest <- dTest[, c(1, 3, 5:8, 15, 18)]
+knitr::kable(dTest)
+
+isoForestAll <- isolation.forest(data5[, c(2:13)], ntrees=1000)
+isoPredAll <- predict(isoForestAll, data5[, c(2:13)])
+predDfAll <- data.frame(isoPredAll)
+names(predDfAll)[names(predDfAll) == 'isoPredAll'] <- 'pred'
+predDfAll[, 'index'] <- rownames(predDfAll)
+predDfAllFilter <- predDfAll[predDfAll['pred'] > 0.60, ]
+orderedAll <- predDfAllFilter[order(predDfAllFilter[, 'pred'], decreasing=T),]
+indicesAll <- c(orderedAll$index)
+dAll <- data[unlist(indicesAll), ]
+dAll['pred'] <- orderedAll$pred
+dAll <- dAll[, c(1, 3, 5:8, 15, 18)]
+knitr::kable(dAll)
+
+# Predict prices through the three models.
+dataIsoAll <- data5[indicesAll, ]
+predRegressIsoAll <-  data.frame(pred=predict(modSelectedNew, newdata=dataIsoAll), actual=dataIsoAll$price, 
+                              index=as.numeric(rownames(dataIsoAll)), row.names=rownames(dataIsoAll))
+
+predHistoricalAll <- data.frame(actual=dataIsoAll$price, index=as.numeric(rownames(dataIsoAll)), row.names=rownames(dataIsoAll))
+for(i in 1:nrow(dataIsoAll)) {
+  testSample <- data[rownames(dataIsoAll[i, ]), ]
+  rowInt <- rownames(dataIsoAll[i, ])
+  suburb <- historical2[historical2$suburb == tolower(testSample$suburb), ]
+  histSales <- testSample$salesHistory
+  histSales2 <- str_split(histSales, '-')
+  histPrices <- data.frame()
+  for(j in 1:length(histSales2[[1]])) {
+    info <- str_split(histSales2[[1]][j], '/')[[1]]
+    # Skip over any sales less than $5000 in case a rental history snuck in.
+    if(as.numeric(info[3]) < 5000) {
+      next
+    }
+    histPrices[j, 'month'] <- info[1]
+    histPrices[j, 'year'] <- as.numeric(info[2])
+    histPrices[j, 'price'] <- as.numeric(info[3])
+  }
+  
+  histPrices
+  histPricesSimple <- c()
+  ratios <- c()
+  testColumn <- ''
+  if(length(histPrices) > 0) {
+    for(j in 1:length(histPrices)) {
+      year <- histPrices[j, 'year']
+      if(is.na(year)) { next }
+      if(year == 2021) {
+        month <- histPrices[j, 'month']
+        #https://stackoverflow.com/questions/6549239/convert-months-mmm-to-numeric
+        monthNum <- match(month, month.abb)
+        # Add a 0 to the left if the month isn't 10
+        if(monthNum >= 10) { next }
+        monthNum <- str_pad(monthNum, 2, 'left', '0')
+        testColumn <- paste('2021-10/2021-', as.character(monthNum), sep='')
+        ratios <- c(ratios, suburb[1, testColumn])
+        ratio <- suburb[1, testColumn]
+        histPricesSimple <- c(histPricesSimple, ratio*histPrices[j, 'price'])
+      }
+      else if(year >= 2012){
+        testColumn <- paste('2021', year, sep='/')
+        ratios <- c(ratios, suburb[1, testColumn])
+        ratio <- suburb[1, testColumn]
+        histPricesSimple <- c(histPricesSimple, ratio*histPrices[j, 'price'])
+      }
+    }
+  }
+  
+  if(length(histPricesSimple) == 0) {
+    predHistoricalAll[rowInt, 'histPrices'] <- paste('0')
+  }
+  else {
+    predHistoricalAll[rowInt, 'histPrices'] <- paste(histPricesSimple, collapse='/')
+  }
+  
+  weight <- 1/(length(ratios))
+  weight
+  predd <- 0
+  for(j in 1:length(ratios)) {
+   predd <- predd + (histPricesSimple[j]* weight)
+  }
+  if(length(predd) == 0) {
+    predHistoricalAll[rowInt, 'predHist'] <- 0
+  }
+  else {
+    predHistoricalAll[rowInt, 'predHist'] <- predd
+  }
+}
+
+joinedPredsAll <- merge(predRegressIsoAll, predHistoricalAll, by='index')
+joinedPredsAll <- subset(joinedPredsAll, select=c('index', 'pred', 'actual.x', 'histPrices', 'predHist'))
+names(joinedPredsAll)[names(joinedPredsAll) == 'actual.x'] <- 'actual'
+
+for(i in 1:nrow(joinedPredsAll)) {
+  # Unpack historical prices
+  histPrices <- str_split(joinedPredsAll[i, 'histPrices'], '/')[[1]]
+  histPricesIndv <- c()
+  for(j in 1:length(histPrices)) {
+    histPricesIndv <- c(histPricesIndv, as.numeric(histPrices[j]))
+  }
+  predPrice <- joinedPredsAll[i, 'pred']
+  joinedPredsAll[i, 'hybrid'] <- mean(c(histPricesIndv, predPrice))
+}
+
+row.names(joinedPredsAll) <- joinedPredsAll$index
+joinedPredsAll <- joinedPredsAll[ordered(joinedPredsAll$index), ]
+
+transformedDataAll <- dataIsoAll
+transformedDataAll[, 'bin1'] <- 0
+transformedDataAll[, 'bin2'] <- 0
+transformedDataAll[, 'bin3'] <- 0
+transformedDataAll[, 'bin4'] <- 0
+transformedDataAll[, 'bin5'] <- 0
+
+getRatio <- function(month, year, suburb) {
+  ratio <- 1
+  if(is.na(year)) { 
+    return(ratio)
+  }
+  if(year == 2021) {
+    #https://stackoverflow.com/questions/6549239/convert-months-mmm-to-numeric
+    monthNum <- match(month, month.abb)
+    # Add a 0 to the left if the month isn't 10
+    if(monthNum >= 10) {
+      return(ratio)
+    }
+    monthNum <- str_pad(monthNum, 2, 'left', '0')
+    testColumn <- paste('2021-10/2021-', as.character(monthNum), sep='')
+    ratio <- suburb[1, testColumn]
+  }
+  else if(year >= 2012){
+    testColumn <- paste('2021', year, sep='/')
+    ratio <- suburb[1, testColumn]
+  }
+  
+  ratio
+}
+
+library(stringr)
+for(i in 1:nrow(transformedDataAll)) {
+  testSample <- data[rownames(transformedDataAll[i, ]), ]
+  rowInt <- rownames(transformedDataAll[i, ])
+  suburb <- historical2[historical2$suburb == tolower(testSample$suburb), ]
+  histSales <- testSample$salesHistory
+  histSales2 <- str_split(histSales, '-')
+  histPrices <- data.frame()
+  tempSalesYear <- c()
+  tempSalesPrice <- c()
+  for(j in 1:length(histSales2[[1]])) {
+    info <- str_split(histSales2[[1]][j], '/')[[1]]
+    # Skip over any sales less than $5000 in case a rental history snuck in.
+    if(as.numeric(info[3]) < 5000) {
+      next
+    }
+    
+    saleMonth <- info[1]
+    saleYear <- as.numeric(info[2])
+    salePrice <- as.numeric(info[3])
+    
+    if(saleYear < 2012) {
+      next
+    }
+    
+    tempSalesYear <- c(tempSalesYear, saleYear)
+    tempSalesPrice <- c(tempSalesPrice, salePrice)
+    
+    if(j == 1) {
+      ratio <- getRatio(saleMonth, saleYear, suburb)
+      histPrices[j, 'year'] <- saleYear
+      histPrices[j, 'price'] <- (salePrice*as.numeric(ratio))
+    }
+    
+    bIndv <- F
+    if(j > 1) {
+      for(k in 1:length(tempSalesYear)) {
+        if(k == j) {
+          next
+        }
+        ratio <- getRatio(saleMonth, saleYear, suburb)
+        if(tempSalesYear[k] %in% c(2020, 2021) && saleYear %in% c(2020, 2021)) {
+          adjSalePrice <- (salePrice*as.numeric(ratio))
+          salePrice <- mean(c(tempSalesPrice[k], adjSalePrice))
+          histPrices[k, 'price'] <- salePrice
+          histPrices[k, 'year'] <- tempSalesYear[k] 
+        }
+        else if(tempSalesYear[k] %in% c(2018, 2019) && saleYear %in% c(2018, 2019)) {
+          adjSalePrice <- (salePrice*as.numeric(ratio))
+          salePrice <- mean(c(tempSalesPrice[k], adjSalePrice))
+          histPrices[k, 'price'] <- salePrice
+          histPrices[k, 'year'] <- tempSalesYear[k] 
+        }
+        else if(tempSalesYear[k] %in% c(2016, 2017) && saleYear %in% c(2016, 2017)) {
+          adjSalePrice <- (salePrice*as.numeric(ratio))
+          salePrice <- mean(c(tempSalesPrice[k], adjSalePrice))
+          histPrices[k, 'price'] <- salePrice
+          histPrices[k, 'year'] <- tempSalesYear[k] 
+        }
+        else if(tempSalesYear[k] %in% c(2014, 2015) && saleYear %in% c(2014, 2015)) {
+          adjSalePrice <- (salePrice*as.numeric(ratio))
+          salePrice <- mean(c(tempSalesPrice[k], adjSalePrice))
+          histPrices[k, 'price'] <- salePrice
+          histPrices[k, 'year'] <- tempSalesYear[k] 
+        }
+        else if(tempSalesYear[k] %in% c(2012, 2013) && saleYear %in% c(2012, 2013)) {
+          adjSalePrice <- (salePrice*as.numeric(ratio))
+          salePrice <- mean(c(tempSalesPrice[k], adjSalePrice))
+          histPrices[k, 'price'] <- salePrice
+          histPrices[k, 'year'] <- tempSalesYear[k] 
+        }
+        else {
+          bIndv <- T
+        }
+      }
+    }
+    if(bIndv) {
+      ratio <- getRatio(saleMonth, saleYear, suburb)
+      histPrices[j, 'year'] <- saleYear
+      histPrices[j, 'price'] <- (salePrice*as.numeric(ratio))
+    }
+  }
+  
+  if(length(histPrices) > 0) {
+    for(j in 1:length(histPrices)) {
+      year <- histPrices[j, 'year']
+      if(is.na(year)) { next }
+      if(year %in% c(2020, 2021)) {
+        transformedDataAll[rowInt, 'bin5'] <- histPrices[j, 'price']
+      }
+      else if(year %in% c(2018, 2019)) {
+        transformedDataAll[rowInt, 'bin4'] <- histPrices[j, 'price']
+      }
+      else if(year %in% c(2016, 2017)) {
+        transformedDataAll[rowInt, 'bin3'] <- histPrices[j, 'price']
+      }
+      else if(year %in% c(2014, 2015)) {
+        transformedDataAll[rowInt, 'bin2'] <- histPrices[j, 'price']
+      }
+      else if(year %in% c(2012, 2013)) {
+        transformedDataAll[rowInt, 'bin1'] <- histPrices[j, 'price']
+      }
+    }
+  }
+}
+
+transformedDataAll2 <- transformedDataAll
+for(i in 1:5) {
+  bB <- paste0('bBin', i)
+  b <- paste0('bin', i)
+  transformedDataAll2[, bB] <- apply(transformedDataAll2, 1,
+                                     FUN=function(x) if(x[b] == 0) 0 else 1)
+}
+
+jpA <- joinedPredsAll
+tdt2A <- transformedDataAll2
+for(i in 1:nrow(jpA))
+{
+  pr <- jpA[i, 'pred']
+  phi <- as.numeric(tdt2A[i, 14:18])
+  pa <- jpA[i, 'actual']
+  iphi <- as.numeric(tdt2A[i, 19:23])
+  res <- fancyFormula(pr, phi, pa, iphi, ww)
+  jpA[i, 'fancy'] <- res
+}
+
+fancyAllMSE <- mean((jpA$actual - jpA$fancy)^2)
+fancyAllRMSE <- sqrt(fancyAllMSE)
+fancyAllMSE
+fancyAllRMSE
+
+regressAllMSE <- mean((joinedPredsAll$pred - joinedPredsAll$actual)^2)
+regressAllRMSE <- sqrt(regressAllMSE)
+
+# Historical MSE, RMSE
+histAllMSE <- mean((joinedPredsAll$predHist - joinedPredsAll$actual)^2)
+histAllRMSE <- sqrt(histAllMSE)
+
+# Hybrid MSE, RMSE
+hybridAllMSE <- mean((joinedPredsAll$hybrid - joinedPredsAll$actual)^2)
+hybridAllRMSE <- sqrt(hybridAllMSE)
+
+regressAllRMSE
+histAllRMSE
+hybridAllRMSE
+fancyAllRMSE
+
+sprintf('RMSE Difference: Regression Model - Historical: %f', (regressAllRMSE - histAllRMSE))
+sprintf('RMSE Difference: Regression Model - Hybrid Mean: %f', (regressAllRMSE - hybridAllRMSE))
+sprintf('RMSE Difference: Regression Model - Hybrid Fancy: %f', (regressAllRMSE - fancyAllRMSE))
+
+sprintf('RMSE Difference: Historical - Hybrid Mean: %f', (histAllRMSE - hybridAllRMSE))
+sprintf('RMSE Difference: Historical - Hybrid Fancy: %f', (histAllRMSE - fancyAllRMSE))
+
+sprintf('RMSE Difference: Hybrid Mean - Hybrid Fancy: %f', (hybridAllRMSE - fancyAllRMSE))
