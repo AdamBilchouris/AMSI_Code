@@ -27,6 +27,9 @@ data5 <- data4[, c(2:7, 11:14, 17:19)]
 #======== Models =========
 # Get new samples. This removes the assumption that some might houses might have no historical sales.
 # This will never be the case as the data was cleaned.
+
+# Get avg  RMSE of all iterations.
+
 library(stringr)
 keepIndexNew <- c()
 for(i in 1:nrow(data)) {
@@ -73,6 +76,11 @@ for(i in 1:nrow(data)) {
 
 train <- data5[-keepIndexNew, ]
 test <- data5[keepIndexNew, ]
+
+# 50% of current testing set gets put into a new dataset which is for testing. <- Validation
+# The other 50% current test data + training data (3000 houses) <- New train.
+# 10 , 20 , ... iterations.
+
 
 #samplesNew <- sample(nrow(data5), nrow(data5)*0.6)
 #train <- data5[samplesNew, ]
@@ -603,7 +611,7 @@ fancyFormulaMSE <- function(w) {
   )
 }
 
-aaa <- optim(c(0.1, 0.1, 0.2, 0.2, 0.2, 0.2), fancyFormulaMSE, method='L-BFGS-B', lower=rep(0, 6), upper=rep(1, 6))
+aaa <- optim(c(0.1, 0.1, 0.2, 0.2, 0.2, 0.2), fancyFormulaMSE, method='L-BFGS-B', lower=rep(0, 6))#, upper=rep(1, 6))
 aaa$par
 ww <- aaa$par/sum(aaa$par)
 ww
@@ -967,3 +975,35 @@ sprintf('RMSE Difference: Historical - Hybrid Mean: %f', (histAllRMSE - hybridAl
 sprintf('RMSE Difference: Historical - Hybrid Fancy: %f', (histAllRMSE - fancyAllRMSE))
 
 sprintf('RMSE Difference: Hybrid Mean - Hybrid Fancy: %f', (hybridAllRMSE - fancyAllRMSE))
+
+
+bundoora <- dataBundoora
+
+for(i in 1:nrow(bundoora)) {
+  testSample <- data[rownames(bundoora[i, ]), ]
+  rowInt <- rownames(bundoora[i, ])
+  suburb <- historical2[historical2$suburb == 'bundoora', ]
+  year <- as.numeric(format(bundoora[i, 'date'], '%Y'))
+    if(is.na(year)) { next }
+    if(year == 2021) {
+      monthNum <- as.numeric(format(bundoora[i, 'date'], '%m'))
+      #https://stackoverflow.com/questions/6549239/convert-months-mmm-to-numeric
+      # Add a 0 to the left if the month isn't 10
+      if(monthNum >= 10) { next }
+      monthNum <- str_pad(monthNum, 2, 'left', '0')
+      testColumn <- paste('2021-10/2021-', as.character(monthNum), sep='')
+      ratio <- suburb[1, testColumn]
+      bundoora[i, 'price'] <- ratio*bundoora[i, 'price']
+    }
+    else if(year >= 2012) {
+      #testColumn <- c(testColumn, paste('2021', year, sep='/'))
+      testColumn <- paste('2021', year, sep='/')
+      ratio <- suburb[1, testColumn]
+      bundoora[i, 'price'] <- ratio*bundoora[i, 'price']
+  }
+}
+
+bundooraLM <- lm(price ~ date, data=bundoora)
+summary(bundooraLM)
+
+bundoora2 <- bundoora$price - as.numeric(bundooraLM$coefficients[2])*as.numeric(bundoora$date) + mean2021
