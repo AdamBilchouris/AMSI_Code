@@ -3,7 +3,6 @@ data <- read.csv('big_removed.csv')
 #add index
 data$index <- 1:nrow(data)
 str(head(data))
-# Make it non-exponential ?
 
 data$dateObj <- as.Date(data$date, '%d-%b-%Y')
 
@@ -16,7 +15,7 @@ crimeSum$suburb <- str_to_title(crimeSum$suburb)
 str(head(crimeSum))
 
 #data2 <- data[, c(2, 3, 5:8, 16, 17)]
-data2 <- data[, c(2, 3, 4, 5:8, 16, 17)]
+data2 <- data[, c(2, 3, 4, 5:8, 16, 17, 18)]
 
 data3 <- merge(x=data2, y=suburbs, by='suburb', all.x=T)
 data3 <- data3[order(data3$index), ]
@@ -25,13 +24,13 @@ data4 <- merge(x=data3, y=crimeSum, by='suburb', all.x=T)
 
 # No lat/lng for both
 # No crime
-data5 <- data4[, c(2, 4:8, 12:15, 18:20)]
+data5 <- data4[, c(2, 4:8, 13:16, 19:21)]
 
 #========= For loop for verification =======
 library(dplyr)
 library(stringr)
 
-iters <- 10
+iters <- 5
 regressRMSEVec <- c()
 histRMSEVec <- c()
 hybridRMSEVec <- c()
@@ -57,13 +56,13 @@ for(i in 1:nrow(historical2)) {
   # For each entry in the subset of the data, increase the price by some inflation factor.
   for(j in 1:nrow(dataSuburb)) {
     rowInt <- rownames(dataSuburb[j, ])
-    year <- as.numeric(format(dataSuburb[rowInt, 'date'], '%Y'))
+    year <- as.numeric(format(dataSuburb[rowInt, 'dateObj'], '%Y'))
     dataSuburb[rowInt, 'year'] <- year
     
     # Adjust by sale data of house.
     if(is.na(year)) { next }
     if(year == 2021) {
-      monthNum <- as.numeric(format(dataSuburb[rowInt, 'date'], '%m'))
+      monthNum <- as.numeric(format(dataSuburb[rowInt, 'dateObj'], '%m'))
       if(monthNum >= 10) { next }
       monthNum <- str_pad(monthNum, 2, 'left', '0')
       testColumn <- paste('2021-10/2021-', as.character(monthNum), sep='')
@@ -75,13 +74,19 @@ for(i in 1:nrow(historical2)) {
       ratio <- suburb[1, testColumn]
       dataSuburb[rowInt, 'price'] <- ratio*dataSuburb[rowInt, 'price']
     }
+    else {
+      testColumn <- paste('2021', '2012', sep='/')
+      ratio <- suburb[1, testColumn]
+      dataSuburb[rowInt, 'price'] <- ratio*dataSuburb[rowInt, 'price']
+    }
   }
   
-  tempLm <- lm(price ~ date, data=dataSuburb)
-  mean2021 <- mean(dataSuburb[dataSuburb$year == 2021, 'price'])
-  dataSuburb$price2 <- dataSuburb$price - as.numeric(tempLm$coefficients[2])*as.numeric(dataSuburb$date) + mean2021
+  #tempLm <- lm(price ~ dateObj, data=dataSuburb)
+  #mean2021 <- mean(dataSuburb[dataSuburb$year == 2021, 'price'])
+  #dataSuburb$price2 <- dataSuburb$price - as.numeric(tempLm$coefficients[2])*as.numeric(dataSuburb$dateObj) + mean2021
   indicesSuburb <- rownames(dataSuburb) 
-  dataAdj[indicesSuburb, 'price'] <- dataSuburb[indicesSuburb, 'price2']
+  #dataAdj[indicesSuburb, 'price'] <- dataSuburb[indicesSuburb, 'price2']
+  dataAdj[indicesSuburb, 'price'] <- dataSuburb[indicesSuburb, 'price']
 }
 
 for(it in 1:iters) {
@@ -126,16 +131,21 @@ for(it in 1:iters) {
     }
   }
   
+  dataAdj2 <- dataAdj[, c(2, 4:8, 13:16, 19:21)]
   # Create the train/test sets.
   # Test is 50% of the most recent sales.
   # Train is 3000 houses from the remaining recent sales + older sales.
   testSamples <- sample(keepIndexNew, 0.5*length(keepIndexNew))
   test <- data5[testSamples, ]
+  #test <- dataAdj2[testSamples, ]
   trainSamplesVec <- union(setdiff(keepIndexNew, testSamples), setdiff(rownames(data5), keepIndexNew))
+  #trainSamplesVec <- union(setdiff(keepIndexNew, testSamples), setdiff(rownames(dataAdj2), keepIndexNew))
   trainSamples <- sample(trainSamplesVec, 3000)
   train <- data5[trainSamples, ]
+  #train <- dataAdj2[trainSamples, ]
   
   y <- 'price'
+  #formulaNew <-  paste0(".*. + I(", names(dataAdj2)[names(dataAdj2)!=y], "^2)+", collapse="") %>%
   formulaNew <-  paste0(".*. + I(", names(data5)[names(data5)!=y], "^2)+", collapse="") %>%
     paste(y, "~", .) %>%
     substr(., 1, nchar(.)-1) %>%
@@ -678,3 +688,4 @@ avgHistRMSE
 avgHybridRMSE
 avgFancyRMSE
 avgWeights
+
