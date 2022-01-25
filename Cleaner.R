@@ -978,6 +978,8 @@ sprintf('RMSE Difference: Hybrid Mean - Hybrid Fancy: %f', (hybridAllRMSE - fanc
 
 
 bundoora <- dataBundoora
+bundoora$dateObj <- as.Date(bundoora$date, '%d-%b-%Y')
+bundoora$year <- as.numeric(format(bundoora$dateObj, '%Y'))
 
 for(i in 1:nrow(bundoora)) {
   testSample <- data[rownames(bundoora[i, ]), ]
@@ -986,7 +988,7 @@ for(i in 1:nrow(bundoora)) {
   year <- as.numeric(format(bundoora[i, 'date'], '%Y'))
     if(is.na(year)) { next }
     if(year == 2021) {
-      monthNum <- as.numeric(format(bundoora[i, 'date'], '%m'))
+      monthNum <- as.numeric(format(bundoora[i, 'dateObj'], '%m'))
       #https://stackoverflow.com/questions/6549239/convert-months-mmm-to-numeric
       # Add a 0 to the left if the month isn't 10
       if(monthNum >= 10) { next }
@@ -1003,7 +1005,94 @@ for(i in 1:nrow(bundoora)) {
   }
 }
 
-bundooraLM <- lm(price ~ date, data=bundoora)
+bundooraLM <- lm(price ~ dateObj, data=bundoora)
 summary(bundooraLM)
 
+mean2021 <- mean(bundoora[bundoora$year == 2021, ]$price)
+
 bundoora2 <- bundoora$price - as.numeric(bundooraLM$coefficients[2])*as.numeric(bundoora$date) + mean2021
+plot(bundoora$dateObj, dataBundoora$price)
+plot(bundoora$dateObj, bundoora$price)
+plot(bundoora$dateObj, bundoora2)
+
+
+dataAlbertPark <- data[data$suburb == 'Albert Park', ]
+albertPark <- data[data$suburb == 'Albert Park', ]
+albertPark$dateObj <- as.Date(albertPark$date, '%d-%b-%Y')
+albertPark$year <- as.numeric(format(albertPark$dateObj, '%Y'))
+
+for(i in 1:nrow(albertPark)) {
+  testSample <- data[rownames(albertPark[i, ]), ]
+  rowInt <- rownames(albertPark[i, ])
+  suburb <- historical2[historical2$suburb == 'albert park', ]
+  year <- as.numeric(format(albertPark[i, 'dateObj'], '%Y'))
+    if(is.na(year)) { next }
+    if(year == 2021) {
+      monthNum <- as.numeric(format(albertPark[i, 'dateObj'], '%m'))
+      #https://stackoverflow.com/questions/6549239/convert-months-mmm-to-numeric
+      # Add a 0 to the left if the month isn't 10
+      if(monthNum >= 10) { next }
+      monthNum <- str_pad(monthNum, 2, 'left', '0')
+      testColumn <- paste('2021-10/2021-', as.character(monthNum), sep='')
+      ratio <- suburb[1, testColumn]
+      albertPark[i, 'price'] <- ratio*albertPark[i, 'price']
+    }
+    else if(year >= 2012) {
+      #testColumn <- c(testColumn, paste('2021', year, sep='/'))
+      testColumn <- paste('2021', year, sep='/')
+      ratio <- suburb[1, testColumn]
+      albertPark[i, 'price'] <- ratio*albertPark[i, 'price']
+  }
+}
+
+albertParkLM <- lm(price ~ dateObj, data=albertPark)
+summary(albertParkLM)
+
+mean2021 <- mean(albertPark[albertPark$year == 2021, ]$price)
+mean2021
+
+albertPark2 <- albertPark$price - as.numeric(albertParkLM$coefficients[2])*as.numeric(albertPark$dateObj) + mean2021
+plot(albertPark$dateObj, dataAlbertPark$price)
+plot(albertPark$dateObj, albertPark$price)
+plot(albertPark$dateObj, albertPark2)
+
+dataKew <- data[data$suburb == 'Kew', ]
+kew <- data[data$suburb == 'Kew', ]
+kew$dateObj <- as.Date(kew$date, '%d-%b-%Y')
+kew$year <- as.numeric(format(kew$dateObj, '%Y'))
+
+for(i in 1:nrow(kew)) {
+  testSample <- data[rownames(kew[i, ]), ]
+  rowInt <- rownames(kew[i, ])
+  suburb <- historical2[historical2$suburb == 'kew', ]
+  year <- as.numeric(format(kew[i, 'dateObj'], '%Y'))
+    if(is.na(year)) { next }
+    if(year == 2021) {
+      monthNum <- as.numeric(format(kew[i, 'dateObj'], '%m'))
+      #https://stackoverflow.com/questions/6549239/convert-months-mmm-to-numeric
+      # Add a 0 to the left if the month isn't 10
+      if(monthNum >= 10) { next }
+      monthNum <- str_pad(monthNum, 2, 'left', '0')
+      testColumn <- paste('2021-10/2021-', as.character(monthNum), sep='')
+      ratio <- suburb[1, testColumn]
+      kew[i, 'price'] <- ratio*kew[i, 'price']
+    }
+    else if(year >= 2012) {
+      #testColumn <- c(testColumn, paste('2021', year, sep='/'))
+      testColumn <- paste('2021', year, sep='/')
+      ratio <- suburb[1, testColumn]
+      kew[i, 'price'] <- ratio*kew[i, 'price']
+  }
+}
+
+kewLM <- lm(price ~ dateObj, data=kew)
+summary(kewLM)
+
+mean2021 <- mean(kew[kew$year == 2021, ]$price)
+mean2021
+
+kew2 <- kew$price - as.numeric(kewLM$coefficients[2])*as.numeric(kew$dateObj) + mean2021
+plot(kew$dateObj, dataKew$price)
+plot(kew$dateObj, kew$price)
+plot(kew$dateObj, kew2)
+
