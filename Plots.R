@@ -25,10 +25,13 @@ data3 <- data3[order(data3$index), ]
 data4 <- merge(x=data3, y=crimeSum, by='suburb', all.x=T)
 data5 <- data4[, c(2:7, 11:14, 17:19)]
 
+# Assuming dataAdj2 has been created in Looped.R
+jj <- (merge(data, dataAdj2, by='row.names'))
+
 graphDatePrice <- data[, c('dateObj', 'price', 'suburb', 'land_size', 'bedrooms', 'year')] %>%
-  ggplot(aes(x=dateObj, y=price, colour=suburb)) +
+  ggplot(aes(x=dateObj, y=price)) + #, colour=suburb)) +
   geom_point() +
-  geom_vline(xintercept=as.Date('2012', '%Y')) +
+  #geom_vline(xintercept=as.Date('2012', '%Y'), color='green') +
   labs(title='Date vs. Price',
        x='Date',
        y='Sale Price ($AUD)',
@@ -96,4 +99,55 @@ graphBoxBedrooms <- data[, c('dateObj', 'price', 'parking_spaces', 'land_size', 
   #facet_wrap(~bathrooms, nrow=2, ncol=4, scale='free_y')
 
 graphBoxBedrooms
+
+
+graphDatePriceDiff <- jj[, c('dateObj', 'price.x', 'price.y', 'suburb')] %>%
+  ggplot(aes(x=dateObj, y=price.y-price.x)) + #, colour=suburb)) +
+  geom_point() +
+  #geom_vline(xintercept=as.Date('2012', '%Y'), color='green') +
+  labs(title='Date vs. Price Difference',
+       x='Date',
+       y='Price Difference($AUD)',
+       color='Suburb') +
+  ylim(0, 2500000) +
+  theme_bw() +
+  theme(axis.title=element_text())
+
+graphDatePriceDiff
+
+graphDatePriceAdj <- jj[, c('dateObj', 'price.x', 'price.y', 'suburb')] %>%
+  ggplot(aes(x=dateObj, y=price.y, colour=suburb)) +
+  geom_point() +
+  geom_vline(xintercept=as.Date('2012', '%Y'), color='green') +
+  labs(title='Date vs. Price Adj.',
+       x='Date',
+       y='Price Adjusted ($AUD)',
+       color='Suburb') +
+  ylim(0, 2500000) +
+  theme_bw() +
+  theme(axis.title=element_text())
+
+graphDatePriceAdj
+
+graphDistBallaratGeelong <- data5[, c('Dist_Ballarat', 'Dist_Geelong')] %>%
+  ggplot(aes(x=Dist_Ballarat, y=Dist_Geelong)) +
+  geom_point() + 
+  labs(title='Dist. to Ballarat vs. Dist. to Geelong',
+       x='Dist. to Ballarat',
+       y='Dist. to Geelong') +
+  theme_bw() +
+  theme(axis.title=element_text())
+
+graphDistBallaratGeelong 
+
+graphElevGeelong <- data5[, c('elevation', 'Dist_Geelong')] %>%
+  ggplot(aes(x=elevation, y=Dist_Geelong)) +
+  geom_point() + 
+  labs(title='Elevation vs. Dist. to Geelong',
+       x='Elevation',
+       y='Dist. to Geelong') +
+  theme_bw() +
+  theme(axis.title=element_text())
+
+graphElevGeelong 
 
