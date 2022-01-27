@@ -27,13 +27,11 @@ data4 <- merge(x=data3, y=crimeSum, by='suburb', all.x=T)
 data5 <- data4[, c(2, 4:8, 13:16, 19:21)]
 
 
-
-
 #========= For loop for verification =======
 library(dplyr)
 library(stringr)
 
-iters <- 2
+iters <- 1
 regressRMSEVec <- c()
 histRMSEVec <- c()
 hybridRMSEVec <- c()
@@ -119,9 +117,9 @@ for(it in 1:iters) {
       monthNum <- match(saleMonth, month.abb)
       saleYear <- as.numeric(info[2])
       salePrice <- as.numeric(info[3])
-      if(monthNum >= 10 && saleYear == 2021) {
-        histAbove <- histAbove - 1 
-      }
+      #if(monthNum >= 10 && saleYear == 2021) {
+      #  histAbove <- histAbove - 1 
+      #}
       if(saleYear < 2012) {
         histAbove <- histAbove - 1
       }
@@ -153,6 +151,9 @@ for(it in 1:iters) {
   trainSamples <- sample(trainSamplesVec, 3000)
   #train <- data5[trainSamples, ]
   train <- dataAdj2[trainSamples, ]
+  
+  train <- na.omit(train)
+  test <- na.omit(test)
   
   y <- 'price'
   #formulaNew <-  paste0(".*. + I(", names(dataAdj2)[names(dataAdj2)!=y], "^2)+", collapse="") %>%
@@ -235,7 +236,10 @@ for(it in 1:iters) {
           #https://stackoverflow.com/questions/6549239/convert-months-mmm-to-numeric
           monthNum <- match(month, month.abb)
           # Add a 0 to the left if the month isn't 10
-          if(monthNum >= 10) { next }
+          if(monthNum >= 10) {
+            histPricesSimple <- c(histPricesSimple, histPrices[j, 'price'])
+            ratios <- c(ratios, 1)
+          }
           monthNum <- str_pad(monthNum, 2, 'left', '0')
           #testColumn <- c(testColumn, paste('2021-10/2021-', as.character(monthNum), sep=''))
           testColumn <- paste('2021-10/2021-', as.character(monthNum), sep='')
@@ -347,7 +351,11 @@ for(it in 1:iters) {
           #https://stackoverflow.com/questions/6549239/convert-months-mmm-to-numeric
           monthNum <- match(month, month.abb)
           # Add a 0 to the left if the month isn't 10
-          if(monthNum >= 10) { next }
+          if(monthNum >= 10) { 
+            histPricesSimple <- c(histPricesSimple, histPrices[j, 'price'])
+            ratios <- c(ratios, 1)
+          }
+          
           monthNum <- str_pad(monthNum, 2, 'left', '0')
           testColumn <- paste('2021-10/2021-', as.character(monthNum), sep='')
           ratios <- c(ratios, suburb[1, testColumn])
@@ -758,7 +766,10 @@ for(i in 1:nrow(dataIsoAll)) {
         #https://stackoverflow.com/questions/6549239/convert-months-mmm-to-numeric
         monthNum <- match(month, month.abb)
         # Add a 0 to the left if the month isn't 10
-        if(monthNum >= 10) { histPricesSimples <- c(histPricesSimple, histPrices[j, 'price'])}
+        if(monthNum >= 10) {
+            histPricesSimple <- c(histPricesSimple, histPrices[j, 'price'])
+            ratios <- c(ratios, 1)
+        }
         monthNum <- str_pad(monthNum, 2, 'left', '0')
         testColumn <- paste('2021-10/2021-', as.character(monthNum), sep='')
         ratios <- c(ratios, suburb[1, testColumn])
@@ -1004,7 +1015,7 @@ sprintf('RMSE Difference: Hybrid Mean - Hybrid Fancy: %f', (hybridAllRMSE - fanc
 library(dplyr)
 library(stringr)
 
-iters <- 2
+iters <- 1
 regressRMSEVec <- c()
 histRMSEVec <- c()
 hybridRMSEVec <- c()
@@ -1081,7 +1092,7 @@ for(it in 1:iters) {
     month <- as.numeric(format(data[rowInt, 'dateObj'], '%m'))
     monthKeep <- (month <= 9 && month >= 1)
     histCount <- str_count(data[i, 'salesHistory'], '-')
-    if(yearKeep == F || monthKeep == F) {
+    if(yearKeep == F || (yearKeep == T && monthKeep == F)) {
       next
     }
     
@@ -1111,7 +1122,7 @@ for(it in 1:iters) {
       next
     }
     if(histAbove >= histCount) {
-      keepIndexNew <- c(keepIndexNew, i)
+      keepIndexNew <- c(keepIndexNew, rowInt)
     }
   }
   
@@ -1127,6 +1138,9 @@ for(it in 1:iters) {
   trainSamples <- sample(trainSamplesVec, 3000)
   #train <- data6[trainSamples, ]
   train <- dataAdj2[trainSamples, ]
+  
+  train <- na.omit(train)
+  test <- na.omit(test)
   
   y <- 'price'
   #formulaNew <-  paste0(".*. + I(", names(dataAdj2)[names(dataAdj2)!=y], "^2)+", collapse="") %>%
@@ -1209,7 +1223,10 @@ for(it in 1:iters) {
           #https://stackoverflow.com/questions/6549239/convert-months-mmm-to-numeric
           monthNum <- match(month, month.abb)
           # Add a 0 to the left if the month isn't 10
-          if(monthNum >= 10) { next }
+          if(monthNum >= 10) {
+            histPricesSimple <- c(histPricesSimple, histPrices[j, 'price'])
+            ratios <- c(ratios, 1)
+          }
           monthNum <- str_pad(monthNum, 2, 'left', '0')
           #testColumn <- c(testColumn, paste('2021-10/2021-', as.character(monthNum), sep=''))
           testColumn <- paste('2021-10/2021-', as.character(monthNum), sep='')
@@ -1321,7 +1338,10 @@ for(it in 1:iters) {
           #https://stackoverflow.com/questions/6549239/convert-months-mmm-to-numeric
           monthNum <- match(month, month.abb)
           # Add a 0 to the left if the month isn't 10
-          if(monthNum >= 10) { next }
+          if(monthNum >= 10) {
+            histPricesSimple <- c(histPricesSimple, histPrices[j, 'price'])
+            ratios <- c(ratios, 1)
+          }
           monthNum <- str_pad(monthNum, 2, 'left', '0')
           testColumn <- paste('2021-10/2021-', as.character(monthNum), sep='')
           ratios <- c(ratios, suburb[1, testColumn])
@@ -1639,7 +1659,6 @@ for(it in 1:iters) {
   aaa <- optim(c(0.1, 0.1, 0.2, 0.2, 0.2, 0.2), fancyFormulaMSE, method='L-BFGS-B', lower=rep(0, 6))#, upper=rep(1, 6))
   aaa$par
   ww <- aaa$par/sum(aaa$par)
-  ww
   
   jpT <- joinedPreds
   tdt2T <- transformedDataTest2
@@ -1679,3 +1698,4 @@ avgHistRMSE
 avgHybridRMSE
 avgFancyRMSE
 avgWeights
+
