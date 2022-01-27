@@ -977,6 +977,7 @@ sprintf('RMSE Difference: Historical - Hybrid Fancy: %f', (histAllRMSE - fancyAl
 sprintf('RMSE Difference: Hybrid Mean - Hybrid Fancy: %f', (hybridAllRMSE - fancyAllRMSE))
 
 
+dataBundoora <- data[data$suburb == 'Bundoora', ]
 bundoora <- dataBundoora
 bundoora$dateObj <- as.Date(bundoora$date, '%d-%b-%Y')
 bundoora$year <- as.numeric(format(bundoora$dateObj, '%Y'))
@@ -985,7 +986,7 @@ for(i in 1:nrow(bundoora)) {
   testSample <- data[rownames(bundoora[i, ]), ]
   rowInt <- rownames(bundoora[i, ])
   suburb <- historical2[historical2$suburb == 'bundoora', ]
-  year <- as.numeric(format(bundoora[i, 'date'], '%Y'))
+  year <- as.numeric(format(bundoora[i, 'dateObj'], '%Y'))
     if(is.na(year)) { next }
     if(year == 2021) {
       monthNum <- as.numeric(format(bundoora[i, 'dateObj'], '%m'))
@@ -1010,7 +1011,7 @@ summary(bundooraLM)
 
 mean2021 <- mean(bundoora[bundoora$year == 2021, ]$price)
 
-bundoora2 <- bundoora$price - as.numeric(bundooraLM$coefficients[2])*as.numeric(bundoora$date) + mean2021
+bundoora2 <- bundoora$price - as.numeric(bundooraLM$coefficients[2])*as.numeric(bundoora$dateObj) + mean2021
 plot(bundoora$dateObj, dataBundoora$price)
 plot(bundoora$dateObj, bundoora$price)
 plot(bundoora$dateObj, bundoora2)

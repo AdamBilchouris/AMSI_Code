@@ -53,19 +53,79 @@ anim <- animate(graphDatePrice.animate, height=700, width=1000, fps=30, duration
 
 anim_save(filename='graphtest.gif', animation=anim)
 
-graphBedroomsPrice <- data[, c('dateObj', 'price', 'suburb', 'land_size', 'bedrooms', 'bathrooms')] %>%
-  ggplot(aes(x=bedrooms, y=price, color=bathrooms)) + 
+graphBedroomsPrice <- bundoora[, c('dateObj', 'price', 'suburb', 'land_size', 'bedrooms', 'bathrooms')] %>%
+  ggplot(aes(x=bedrooms, y=price)) + #, color=bathrooms)) + 
   geom_point() +
-  labs(title='Date vs. Bedrooms',
+  labs(title='Bedrooms vs. Price',
        x='Bedrooms',
-       y='Sale Price ($AUD)',
-       color='Bathrooms') +
+       y='Sale Price ($AUD)') + 
+       #color='Bathrooms') +
+  ylim(0, 2500000) +
+  scale_x_continuous(breaks = pretty_breaks()) +
   theme_few() +
   theme(axis.title=element_text())
   #facet_wrap(~bathrooms, nrow=2, ncol=4, scale='free_y')
 
 graphBedroomsPrice
 
+graphBathroomsPrice <- bundoora[, c('dateObj', 'price', 'suburb', 'land_size', 'bedrooms', 'bathrooms')] %>%
+  ggplot(aes(x=bathrooms, y=price)) + #, color=bathrooms)) + 
+  geom_point() +
+  labs(title='Bathrooms vs. Price',
+       x='Bathooms',
+       y='Sale Price ($AUD)',
+       color='Bathrooms') +
+  ylim(0, 2500000) +
+  scale_x_continuous(breaks = pretty_breaks()) +
+  theme_few() +
+  theme(axis.title=element_text())
+  #facet_wrap(~bathrooms, nrow=2, ncol=4, scale='free_y')
+
+graphBathroomsPrice
+
+graphLandSizePrice <- data[, c('dateObj', 'price', 'suburb', 'land_size', 'bedrooms', 'bathrooms')] %>%
+  ggplot(aes(x=land_size, y=price)) + #, color=bathrooms)) + 
+  geom_point() +
+  labs(title='Land Size vs. Price',
+       x='Land Size',
+       y='Sale Price ($AUD)',
+       color='Bathrooms') +
+  ylim(0, 2500000) +
+  #scale_x_continuous(breaks = pretty_breaks()) +
+  theme_few() +
+  theme(axis.title=element_text())
+  #facet_wrap(~bathrooms, nrow=2, ncol=4, scale='free_y')
+
+graphLandSizePrice
+
+graphBedroomsBathrooms <- data[, c('dateObj', 'price', 'suburb', 'land_size', 'bedrooms', 'bathrooms')] %>%
+  ggplot(aes(x=bedrooms, y=bathrooms)) + #, color=bathrooms)) + 
+  geom_point() +
+  labs(title='Bedrooms vs. Bathrooms',
+       x='Bedrooms',
+       y='Bathooms') + 
+  scale_x_continuous(breaks = pretty_breaks()) +
+  scale_y_continuous(breaks = pretty_breaks()) +
+  theme_few() +
+  theme(axis.title=element_text())
+  #facet_wrap(~bathrooms, nrow=2, ncol=4, scale='free_y')
+
+graphBedroomsBathrooms
+
+
+graphBedroomsBathroomsBundoora <- bundoora[, c('dateObj', 'price', 'suburb', 'land_size', 'bedrooms', 'bathrooms')] %>%
+  ggplot(aes(x=bedrooms, y=bathrooms)) + #, color=bathrooms)) + 
+  geom_point() +
+  labs(title='Bedrooms vs. Bathrooms',
+       x='Bedrooms',
+       y='Bathooms') + 
+  scale_x_continuous(breaks = pretty_breaks()) +
+  scale_y_continuous(breaks = pretty_breaks()) +
+  theme_few() +
+  theme(axis.title=element_text())
+  #facet_wrap(~bathrooms, nrow=2, ncol=4, scale='free_y')
+
+graphBedroomsBathroomsBundoora
 
 #toAddNames <- names(modNormalNew$coefficients[14:length(modNormalNew$coefficients)])
 #data6 <- data5
@@ -85,11 +145,10 @@ graphBedroomsPrice
 
 ggcorr(data5[, -1], label=T, label_alpha=T)
 
-
-
 graphBoxBedrooms <- data[, c('dateObj', 'price', 'parking_spaces', 'land_size', 'bedrooms', 'bathrooms')] %>%
   ggplot(aes(x=bedrooms, y=bathrooms, group=bathrooms)) + 
-  geom_boxplot() +
+  geom_point() +
+  #geom_boxplot() +
   labs(x='Bedrooms',
        y='Bathrooms') +
   theme_bw() +
@@ -150,4 +209,3 @@ graphElevGeelong <- data5[, c('elevation', 'Dist_Geelong')] %>%
   theme(axis.title=element_text())
 
 graphElevGeelong 
-
