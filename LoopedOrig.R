@@ -11,7 +11,6 @@ data$index <- 1:nrow(data)
 rownames(data) <- data$index
 str(head(data))
 
-
 library(stringr)
 suburbs <- read.csv('suburbs_data.csv')
 suburbs$suburb <- str_to_title(suburbs$suburb)
@@ -37,7 +36,7 @@ library(dplyr)
 library(stringr)
 library(nloptr)
 
-iters <- 5
+iters <- 20
 regressRMSEVec <- c()
 histRMSEVec <- c()
 hybridRMSEVec <- c()
@@ -227,10 +226,10 @@ for(it in 1:iters) {
   #train <- dataAdj2[trainSamples, ]
   }
   
-  train <- data5[trainSet[[it]], ]
-  #train <- dataAdj2[trainSet[[it]], ]
-  test <- data5[testSet[[it]], ]
-  #test <- dataAdj2[testSet[[it]], ]
+  #train <- data5[trainSet[[it]], ]
+  train <- dataAdj2[trainSet[[it]], ]
+  #test <- data5[testSet[[it]], ]
+  test <- dataAdj2[testSet[[it]], ]
   
   train <- na.omit(train)
   test <- na.omit(test)
@@ -752,16 +751,20 @@ for(it in 1:iters) {
   rownames(jp) <- as.character(jp$index)
   tryData <- merge(jp, tdt2, by='row.names')
   rownames(tryData) <- tryData$index
+  
+  # Add a penalty if it goes beyond 1.
+  # Make it 1 before anything
   fancyFormulaMSE <- function(w) {
+    w <- w/sum(w)
     mean(
       (
         tryData$actual - ((w[1]*tryData$pred + w[2]*tryData$bin1 + w[3]*tryData$bin2 + w[4]*tryData$bin3 + w[5]*tryData$bin4 + w[6]*tryData$bin5) / 
                        (w[1] + w[2]*tryData$bBin1 + w[3]*tryData$bBin2 + w[4]*tryData$bBin3 + w[5]*tryData$bBin4 + w[6]*tryData$bBin5))
-      )^2
+      )^2 + 1e10*abs(sum(w)-1) 
     )
   }
   
-  aaa <- optim(c(0.1, 0.1, 0.2, 0.2, 0.2, 0.2), fancyFormulaMSE, method='L-BFGS-B', lower=rep(0, 6))#, upper=rep(1, 6))
+  aaa <- optim(c(0.1, 0.1, 0.2, 0.2, 0.2, 0.2), fancyFormulaMSE, method='L-BFGS-B', lower=rep(1e-8, 6), upper=rep(1, 6))
   aaa$par
   ww <- aaa$par/sum(aaa$par)
   ww
@@ -815,6 +818,8 @@ avgFancyRMSE <- mean(fancyRMSEVec)
 avgWeights <- data.frame(w1=mean(weights[, 'w1']), w2=mean(weights[, 'w2']),
                          w3=mean(weights[, 'w3']), w4=mean(weights[, 'w4']),
                          w5=mean(weights[, 'w5']), w6=mean(weights[, 'w6']))
+ww <- as.numeric(avgWeights[1,])
+
 avgRegressRMSE
 avgHistRMSE
 avgHybridRMSE
@@ -1316,10 +1321,10 @@ for(it in 1:iters) {
   #}
   }
   
-  #train <- data6[trainSet2[[it]], ]
-  train <- dataAdj2[trainSet2[[it]], ]
-  #test <- data6[testSet2[[it]], ]
-  test <- dataAdj2[testSet2[[it]], ]
+  train <- data6[trainSet2[[it]], ]
+  #train <- dataAdj2[trainSet2[[it]], ]
+  test <- data6[testSet2[[it]], ]
+  #test <- dataAdj2[testSet2[[it]], ]
   
   train <- na.omit(train)
   test <- na.omit(test)
@@ -1827,8 +1832,6 @@ for(it in 1:iters) {
     (w[1]*pr + w[2]*phi[1] + w[3]*phi[2] + w[4]*phi[3] + w[5]*phi[4] + w[6]*phi[5]) /  (w[1] + sum(w[2:6]*iphi))
   }
  
-  sum(ww[2]*tdt2$bin1 + ww[3]*tdt2$bin2 + ww[4]*tdt2$bin3 - ww[5]*tdt2$bin4 + ww[6]*tdt2$bin5) 
-  
   jp <- joinedPredsTrain
   tdt2 <- transformedDataTrain2
   
@@ -1836,16 +1839,19 @@ for(it in 1:iters) {
   tryData <- merge(jp, tdt2, by='row.names')
   rownames(tryData) <- tryData$index
   
+  # Add a penalty if it goes beyond 1.
+  # Make it 1 before anything
   fancyFormulaMSE <- function(w) {
+    w <- w/sum(w)
     mean(
       (
-        jp$actual - ((w[1]*jp$pred + w[2]*tdt2$bin1 + w[3]*tdt2$bin2 + w[4]*tdt2$bin3 + w[5]*tdt2$bin4 + w[6]*tdt2$bin5) / 
-                       (w[1] + w[2]*tdt2$bBin1 + w[3]*tdt2$bBin2 + w[4]*tdt2$bBin3 + w[5]*tdt2$bBin4 + w[6]*tdt2$bBin5))
-      )^2
+        tryData$actual - ((w[1]*tryData$pred + w[2]*tryData$bin1 + w[3]*tryData$bin2 + w[4]*tryData$bin3 + w[5]*tryData$bin4 + w[6]*tryData$bin5) / 
+                            (w[1] + w[2]*tryData$bBin1 + w[3]*tryData$bBin2 + w[4]*tryData$bBin3 + w[5]*tryData$bBin4 + w[6]*tryData$bBin5))
+      )^2 + 1e10*abs(sum(w)-1) 
     )
   }
   
-  aaa <- optim(c(0.1, 0.1, 0.2, 0.2, 0.2, 0.2), fancyFormulaMSE, method='L-BFGS-B', lower=rep(0, 6))#, upper=rep(1, 6))
+  aaa <- optim(c(0.1, 0.1, 0.2, 0.2, 0.2, 0.2), fancyFormulaMSE, method='L-BFGS-B', lower=rep(1e-8, 6))#, upper=rep(1, 6))
   aaa$par
   ww <- aaa$par/sum(aaa$par)
   
@@ -1895,6 +1901,7 @@ avgWeights2 <- data.frame(w1=mean(weights2[, 'w1']), w2=mean(weights2[, 'w2']),
                          w3=mean(weights2[, 'w3']), w4=mean(weights2[, 'w4']),
                          w5=mean(weights2[, 'w5']), w6=mean(weights2[, 'w6']))
 
+ww2 <- as.numeric(avgWeights2[1,])
 avgRegressRMSE2
 avgHistRMSE2
 avgHybridRMSE2
@@ -2151,7 +2158,7 @@ jpA <- joinedPredsAll
 tdt2A <- transformedDataAll2
 
 rownames(jpA) <- as.character(jpA$index)
-tryDataAll <- merge(jpA, tdt2TA, by='row.names')
+tryDataAll <- merge(jpA, tdt2A, by='row.names')
 rownames(tryDataAll) <- tryDataAll$index
 
 #for(i in 1:nrow(jpA))
@@ -2168,7 +2175,7 @@ for(i in 1:nrow(tryDataAll))
   phi <- as.numeric(tryDataAll[i, 21:25])
   pa <- tryData[i, 'actual']
   iphi <- as.numeric(tryDataAll[i, 26:30])
-  res <- fancyFormula(pr, phi, pa, iphi, ww)
+  res <- fancyFormula(pr, phi, pa, iphi, ww2)
   tryDataAll[i, 'fancy'] <- res
 }
 
