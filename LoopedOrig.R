@@ -1,10 +1,16 @@
 #======== READING =========
 data <- read.csv('big_removed.csv')
-#add index
-data$index <- 1:nrow(data)
-str(head(data))
 
 data$dateObj <- as.Date(data$date, '%d-%b-%Y')
+data$year <- format(data$dateObj, '%Y')
+data <- data[data$year >= 2012, ]
+data <- data[, -18]
+
+#add index
+data$index <- 1:nrow(data)
+rownames(data) <- data$index
+str(head(data))
+
 
 library(stringr)
 suburbs <- read.csv('suburbs_data.csv')
@@ -26,10 +32,10 @@ data4 <- merge(x=data3, y=crimeSum, by='suburb', all.x=T)
 # No crime
 data5 <- data4[, c(2, 4:8, 13:16, 19:21)]
 
-
 #========= For loop for verification =======
 library(dplyr)
 library(stringr)
+library(nloptr)
 
 iters <- 5
 regressRMSEVec <- c()
@@ -94,6 +100,12 @@ for(i in 1:nrow(historical2)) {
   dataAdj[indicesSuburb, 'price'] <- dataSuburb[indicesSuburb, 'price']
 }
 
+trainSet <- c()
+testSet <- c()
+
+dataAdj2 <- dataAdj[, c(2, 4:8, 13:16, 19:21)]
+
+# Generate train/test sets so the models can be comparable.
 for(it in 1:iters) {
   keepIndexNew <- c()
   for(i in 1:nrow(data)) {
@@ -139,18 +151,86 @@ for(it in 1:iters) {
     }
   }
   
-  dataAdj2 <- dataAdj[, c(2, 4:8, 13:16, 19:21)]
   # Create the train/test sets.
   # Test is 50% of the most recent sales.
   # Train is 3000 houses from the remaining recent sales + older sales.
   testSamples <- sample(keepIndexNew, 0.5*length(keepIndexNew))
-  #test <- data5[testSamples, ]
-  test <- dataAdj2[testSamples, ]
   #trainSamplesVec <- union(setdiff(keepIndexNew, testSamples), setdiff(rownames(data5), keepIndexNew))
   trainSamplesVec <- union(setdiff(keepIndexNew, testSamples), setdiff(rownames(dataAdj2), keepIndexNew))
   trainSamples <- sample(trainSamplesVec, 3000)
   #train <- data5[trainSamples, ]
-  train <- dataAdj2[trainSamples, ]
+  #train <- dataAdj2[trainSamples, ]
+  
+  trainSet[[it]] <- trainSamples
+  testSet[[it]] <- testSamples
+}
+
+for(it in 1:iters) {
+  print(it)
+  sprintf('Iteration %d', it)
+  {
+  #keepIndexNew <- c()
+  #for(i in 1:nrow(data)) {
+  #  # Check if the sale year is in 2021 and check between June and September 
+  #  #yearKeep <- str_split(data[i, 'date'], '-')[[1]][3] == '2021'
+  #  #month <- match(str_split(data[i, 'date'], '-')[[1]][2], month.abb)
+  #  year <- as.numeric(format(data[i, 'dateObj'], '%Y'))
+  #  yearKeep <- year == 2021
+  #  month <- as.numeric(format(data[i, 'dateObj'], '%m'))
+  #  monthKeep <- (month <= 9 && month >= 1)
+  #  histCount <- str_count(data[i, 'salesHistory'], '-')
+  #  if(yearKeep == F || monthKeep == F) {
+  #    next
+  #  }
+  #  
+  #  histAbove <- 0
+  #  histPrices <- str_split(data[i, 'salesHistory'], '-')
+  #  for(j in 1:length(histPrices[[1]])) {
+  #    info <- str_split(histPrices[[1]][j], '/')[[1]]
+  #    saleMonth <- info[1]
+  #    monthNum <- match(saleMonth, month.abb)
+  #    saleYear <- as.numeric(info[2])
+  #    salePrice <- as.numeric(info[3])
+  #    #if(monthNum >= 10 && saleYear == 2021) {
+  #    #  histAbove <- histAbove - 1 
+  #    #}
+  #    if(saleYear < 2012) {
+  #      histAbove <- histAbove - 1
+  #    }
+  #    if(salePrice  < 5000) {
+  #      histAbove <- histAbove - 1
+  #    }
+  #    else {
+  #      histAbove <- histAbove + 1
+  #    }
+  #  }
+  #  if(i == 1824 || i == 3763) {
+  #    # Can't seem to get rid of these two points. They are troublesome.
+  #    next
+  #  }
+  #  if(histAbove >= histCount) {
+  #    keepIndexNew <- c(keepIndexNew, i)
+  #  }
+  #}
+  #
+  #dataAdj2 <- dataAdj[, c(2, 4:8, 13:16, 19:21)]
+  ## Create the train/test sets.
+  ## Test is 50% of the most recent sales.
+  ## Train is 3000 houses from the remaining recent sales + older sales.
+  #testSamples <- sample(keepIndexNew, 0.5*length(keepIndexNew))
+  ##test <- data5[testSamples, ]
+  #test <- dataAdj2[testSamples, ]
+  ##trainSamplesVec <- union(setdiff(keepIndexNew, testSamples), setdiff(rownames(data5), keepIndexNew))
+  #trainSamplesVec <- union(setdiff(keepIndexNew, testSamples), setdiff(rownames(dataAdj2), keepIndexNew))
+  #trainSamples <- sample(trainSamplesVec, 3000)
+  ##train <- data5[trainSamples, ]
+  #train <- dataAdj2[trainSamples, ]
+  }
+  
+  train <- data5[trainSet[[it]], ]
+  #train <- dataAdj2[trainSet[[it]], ]
+  test <- data5[testSet[[it]], ]
+  #test <- dataAdj2[testSet[[it]], ]
   
   train <- na.omit(train)
   test <- na.omit(test)
@@ -297,7 +377,7 @@ for(it in 1:iters) {
     joinedPreds[i, 'hybrid'] <- mean(c(histPricesIndv, predPrice))
   }
   
-  row.names(joinedPreds) <- joinedPreds$index
+  rownames(joinedPreds) <- joinedPreds$index
   joinedPreds <- joinedPreds[ordered(joinedPreds$index), ]
   
   # Regression MSE, RMSE
@@ -397,6 +477,7 @@ for(it in 1:iters) {
   joinedPredsTrain <- subset(joinedPredsTrain, select=c('index', 'pred', 'actual.x', 'histPrices', 'predHist'))
   
   names(joinedPredsTrain)[names(joinedPredsTrain) == 'actual.x'] <- 'actual'
+  rownames(joinedPredsTrain) <- joinedPredsTrain$index
   
   # Model with weights
   transformedDataTrain <- train
@@ -659,11 +740,23 @@ for(it in 1:iters) {
   
   jp <- joinedPredsTrain
   tdt2 <- transformedDataTrain2
+  #fancyFormulaMSE <- function(w) {
+  #  mean(
+  #    (
+  #      jp$actual - ((w[1]*jp$pred + w[2]*tdt2$bin1 + w[3]*tdt2$bin2 + w[4]*tdt2$bin3 + w[5]*tdt2$bin4 + w[6]*tdt2$bin5) / 
+  #                     (w[1] + w[2]*tdt2$bBin1 + w[3]*tdt2$bBin2 + w[4]*tdt2$bBin3 + w[5]*tdt2$bBin4 + w[6]*tdt2$bBin5))
+  #    )^2
+  #  )
+  #}
+  
+  rownames(jp) <- as.character(jp$index)
+  tryData <- merge(jp, tdt2, by='row.names')
+  rownames(tryData) <- tryData$index
   fancyFormulaMSE <- function(w) {
     mean(
       (
-        jp$actual - ((w[1]*jp$pred + w[2]*tdt2$bin1 + w[3]*tdt2$bin2 + w[4]*tdt2$bin3 + w[5]*tdt2$bin4 + w[6]*tdt2$bin5) / 
-                       (w[1] + w[2]*tdt2$bBin1 + w[3]*tdt2$bBin2 + w[4]*tdt2$bBin3 + w[5]*tdt2$bBin4 + w[6]*tdt2$bBin5))
+        tryData$actual - ((w[1]*tryData$pred + w[2]*tryData$bin1 + w[3]*tryData$bin2 + w[4]*tryData$bin3 + w[5]*tryData$bin4 + w[6]*tryData$bin5) / 
+                       (w[1] + w[2]*tryData$bBin1 + w[3]*tryData$bBin2 + w[4]*tryData$bBin3 + w[5]*tryData$bBin4 + w[6]*tryData$bBin5))
       )^2
     )
   }
@@ -671,20 +764,37 @@ for(it in 1:iters) {
   aaa <- optim(c(0.1, 0.1, 0.2, 0.2, 0.2, 0.2), fancyFormulaMSE, method='L-BFGS-B', lower=rep(0, 6))#, upper=rep(1, 6))
   aaa$par
   ww <- aaa$par/sum(aaa$par)
+  ww
+  
+  #opts <- list("algorithm"="NLOPT_GN_ISRES", "xtol_rel"=1.0e-8)
+  #nloptrRes <- nloptr(c(0.1, 0.1, 0.2, 0.2, 0.2, 0.2), fancyFormulaMSE, lb=rep(0, 6), ub=rep(1, 6), opts=opts)
+  #solOptr <- nloptrRes$solution
+  #ww <- solOptr/sum(solOptr)
   
   jpT <- joinedPreds
+  rownames(jpT) <- as.character(jpT$index)
   tdt2T <- transformedDataTest2
-  for(i in 1:nrow(jpT))
+  tryData <- merge(jpT, tdt2T, by='row.names')
+  rownames(tryData) <- tryData$index
+  #for(i in 1:nrow(jpT))
+  for(i in 1:nrow(tryData))
   {
-    pr <- jpT[i, 'pred']
-    phi <- as.numeric(tdt2T[i, 14:18])
-    pa <- jpT[i, 'actual']
-    iphi <- as.numeric(tdt2T[i, 19:23])
+    #pr <- jpT[i, 'pred']
+    #phi <- as.numeric(tdt2T[i, 14:18])
+    #pa <- jpT[i, 'actual']
+    #iphi <- as.numeric(tdt2T[i, 19:23])
+    #res <- fancyFormula(pr, phi, pa, iphi, ww)
+    #jpT[i, 'fancy'] <- res
+    
+    pr <- tryData[i, 'pred']
+    phi <- as.numeric(tryData[i, 21:25])
+    pa <- tryData[i, 'actual']
+    iphi <- as.numeric(tryData[i, 26:30])
     res <- fancyFormula(pr, phi, pa, iphi, ww)
-    jpT[i, 'fancy'] <- res
+    tryData[i, 'fancy'] <- res
   }
   
-  fancyMSE <- mean((jpT$actual - jpT$fancy)^2)
+  fancyMSE <- mean((tryData$actual - tryData$fancy)^2)
   fancyRMSE <- sqrt(fancyMSE)
   
   regressRMSEVec <- c(regressRMSEVec, regressRMSE)
@@ -718,20 +828,22 @@ minAicIndex <- which(aicVec == min(aicVec))
 bestModel <- modelVec[[minAicIndex]]
 
 library(isotree)
-isoForestAll <- isolation.forest(data5[, c(2:13)], ntrees=1000)
+isoSeed <- as.numeric(as.POSIXct(Sys.time(), origin = "1970-01-01"))
+isoForestAll <- isolation.forest(data5[, c(2:13)], ntrees=100, sample_size=256, seed=isoSeed)
 isoPredAll <- predict(isoForestAll, data5[, c(2:13)])
 predDfAll <- data.frame(isoPredAll)
 names(predDfAll)[names(predDfAll) == 'isoPredAll'] <- 'pred'
 predDfAll[, 'index'] <- rownames(predDfAll)
-predDfAllFilter <- predDfAll[predDfAll['pred'] > 0.60, ]
+predDfAllFilter <- predDfAll[predDfAll['pred'] > 0.6, ]
 orderedAll <- predDfAllFilter[order(predDfAllFilter[, 'pred'], decreasing=T),]
 indicesAll <- c(orderedAll$index)
 dAll <- data[unlist(indicesAll), ]
 dAll['pred'] <- orderedAll$pred
 dAll <- dAll[, c(1, 3, 5:8, 15, 18)]
+knitr::kable(dAll)
 
-dataIsoAll <- dataAdj2[indicesAll, ]
-#dataIsoAll <- data5[indicesAll, ]
+#dataIsoAll <- dataAdj2[indicesAll, ]
+dataIsoAll <- data5[indicesAll, ]
 
 predRegressIsoAll <-  data.frame(pred=predict(bestModel, newdata=dataIsoAll), actual=dataIsoAll$price, 
                               index=as.numeric(rownames(dataIsoAll)), row.names=rownames(dataIsoAll))
@@ -811,6 +923,7 @@ for(i in 1:nrow(dataIsoAll)) {
 joinedPredsAll <- merge(predRegressIsoAll, predHistoricalAll, by='index')
 joinedPredsAll <- subset(joinedPredsAll, select=c('index', 'pred', 'actual.x', 'histPrices', 'predHist'))
 names(joinedPredsAll)[names(joinedPredsAll) == 'actual.x'] <- 'actual'
+rownames(joinedPredsAll) <- joinedPredsAll$index
 
 for(i in 1:nrow(joinedPredsAll)) {
   # Unpack historical prices
@@ -823,7 +936,7 @@ for(i in 1:nrow(joinedPredsAll)) {
   joinedPredsAll[i, 'hybrid'] <- mean(c(histPricesIndv, predPrice))
 }
 
-row.names(joinedPredsAll) <- joinedPredsAll$index
+rownames(joinedPredsAll) <- joinedPredsAll$index
 joinedPredsAll <- joinedPredsAll[ordered(joinedPredsAll$index), ]
 
 transformedDataAll <- dataIsoAll
@@ -973,20 +1086,32 @@ for(i in 1:5) {
 
 jpA <- joinedPredsAll
 tdt2A <- transformedDataAll2
-for(i in 1:nrow(jpA))
+
+rownames(jpA) <- as.character(jpA$index)
+tryDataAll <- merge(jpA, tdt2A, by='row.names')
+rownames(tryDataAll) <- tryDataAll$index
+
+#for(i in 1:nrow(jpA))
+for(i in 1:nrow(tryDataAll))
 {
-  pr <- jpA[i, 'pred']
-  phi <- as.numeric(tdt2A[i, 14:18])
-  pa <- jpA[i, 'actual']
-  iphi <- as.numeric(tdt2A[i, 19:23])
-  res <- fancyFormula(pr, phi, pa, iphi, avgWeights)
-  jpA[i, 'fancy'] <- res
+  #pr <- jpA[i, 'pred']
+  #phi <- as.numeric(tdt2A[i, 14:18])
+  #pa <- jpA[i, 'actual']
+  #iphi <- as.numeric(tdt2A[i, 19:23])
+  #res <- fancyFormula(pr, phi, pa, iphi, avgWeights)
+  #jpA[i, 'fancy'] <- res
+  
+  pr <- tryDataAll[i, 'pred']
+  phi <- as.numeric(tryDataAll[i, 21:25])
+  pa <- tryData[i, 'actual']
+  iphi <- as.numeric(tryDataAll[i, 26:30])
+  res <- fancyFormula(pr, phi, pa, iphi, ww)
+  tryDataAll[i, 'fancy'] <- res
 }
 
-fancyAllMSE <- mean((jpA$actual - jpA$fancy)^2)
+#fancyAllMSE <- mean((jpA$actual - jpA$fancy)^2)
+fancyAllMSE <- mean((tryDataAll$actual - tryDataAll$fancy)^2)
 fancyAllRMSE <- sqrt(fancyAllMSE)
-fancyAllMSE
-fancyAllRMSE
 
 regressAllMSE <- mean((joinedPredsAll$pred - joinedPredsAll$actual)^2)
 regressAllRMSE <- sqrt(regressAllMSE)
@@ -1006,29 +1131,20 @@ fancyAllRMSE
 
 min(regressAllRMSE, histAllRMSE, hybridAllRMSE, fancyAllRMSE)
 
-sprintf('RMSE Difference: Regression Model - Historical: %f', (regressAllRMSE - histAllRMSE))
-sprintf('RMSE Difference: Regression Model - Hybrid Mean: %f', (regressAllRMSE - hybridAllRMSE))
-sprintf('RMSE Difference: Regression Model - Hybrid Fancy: %f', (regressAllRMSE - fancyAllRMSE))
-
-sprintf('RMSE Difference: Historical - Hybrid Mean: %f', (histAllRMSE - hybridAllRMSE))
-sprintf('RMSE Difference: Historical - Hybrid Fancy: %f', (histAllRMSE - fancyAllRMSE))
-
-sprintf('RMSE Difference: Hybrid Mean - Hybrid Fancy: %f', (hybridAllRMSE - fancyAllRMSE))
-
 #=========== Normal houses ===========
 library(dplyr)
 library(stringr)
 
-iters <- 5
-regressRMSEVec <- c()
-histRMSEVec <- c()
-hybridRMSEVec <- c()
-fancyRMSEVec <- c()
-weights <- data.frame(w1=0, w2=0, w3=0, w4=0, w5=0, w6=0)
+iters <- 20
+regressRMSEVec2 <- c()
+histRMSEVec2 <- c()
+hybridRMSEVec2 <- c()
+fancyRMSEVec2 <- c()
+weights2 <- data.frame(w1=0, w2=0, w3=0, w4=0, w5=0, w6=0)
 
 # Best models
-modelVec <- c()
-aicVec <- c()
+modelVec2 <- c()
+aicVec2 <- c()
 
 # Create new discount factor to cater for 2021.
 # Do this for every suburb.
@@ -1084,6 +1200,13 @@ for(i in 1:nrow(historical2)) {
   dataAdj[indicesSuburb, 'price'] <- dataSuburb[indicesSuburb, 'price']
 }
 
+dataAdj2 <- dataAdj[, c(2, 4:8, 13:16, 19:21)]
+
+trainSet2 <- c()
+testSet2 <- c()
+
+# Generate train/test sets so the models can be comparable.
+# Different to the first one as this has removed data (anomalies)
 for(it in 1:iters) {
   keepIndexNew <- c()
   for(i in 1:nrow(data6)) {
@@ -1130,18 +1253,73 @@ for(it in 1:iters) {
     }
   }
   
-  dataAdj2 <- dataAdj[, c(2, 4:8, 13:16, 19:21)]
   # Create the train/test sets.
   # Test is 50% of the most recent sales.
   # Train is 3000 houses from the remaining recent sales + older sales.
   testSamples <- sample(keepIndexNew, 0.5*length(keepIndexNew))
-  #test <- data6[testSamples, ]
-  test <- dataAdj2[testSamples, ]
   #trainSamplesVec <- union(setdiff(keepIndexNew, testSamples), setdiff(rownames(data6), keepIndexNew))
   trainSamplesVec <- union(setdiff(keepIndexNew, testSamples), setdiff(rownames(dataAdj2), keepIndexNew))
   trainSamples <- sample(trainSamplesVec, 3000)
   #train <- data6[trainSamples, ]
-  train <- dataAdj2[trainSamples, ]
+  #train <- dataAdj2[trainSamples, ]
+  
+  trainSet2[[it]] <- trainSamples
+  testSet2[[it]] <- testSamples
+}
+
+for(it in 1:iters) {
+  sprintf('Iteration %d', it)
+  keepIndexNew <- c()
+  {
+  #for(i in 1:nrow(data6)) {
+  #  # Check if the sale year is in 2021 and check between June and September 
+  #  #yearKeep <- str_split(data[i, 'date'], '-')[[1]][3] == '2021'
+  #  #month <- match(str_split(data[i, 'date'], '-')[[1]][2], month.abb)
+  #  rowInt <- rownames(data6[i, ])
+  #  year <- as.numeric(format(data[rowInt, 'dateObj'], '%Y'))
+  #  yearKeep <- year == 2021
+  #  month <- as.numeric(format(data[rowInt, 'dateObj'], '%m'))
+  #  monthKeep <- (month <= 9 && month >= 1)
+  #  histCount <- str_count(data[i, 'salesHistory'], '-')
+  #  if(yearKeep == F || (yearKeep == T && monthKeep == F)) {
+  #    next
+  #  }
+  #  
+  #  histAbove <- 0
+  #  histPrices <- str_split(data[i, 'salesHistory'], '-')
+  #  for(j in 1:length(histPrices[[1]])) {
+  #    info <- str_split(histPrices[[1]][j], '/')[[1]]
+  #    saleMonth <- info[1]
+  #    monthNum <- match(saleMonth, month.abb)
+  #    saleYear <- as.numeric(info[2])
+  #    salePrice <- as.numeric(info[3])
+  #    if(monthNum >= 10 && saleYear == 2021) {
+  #      histAbove <- histAbove - 1 
+  #    }
+  #    if(saleYear < 2012) {
+  #      histAbove <- histAbove - 1
+  #    }
+  #    if(salePrice  < 5000) {
+  #      histAbove <- histAbove - 1
+  #    }
+  #    else {
+  #      histAbove <- histAbove + 1
+  #    }
+  #  }
+  #  if(i == 1824 || i == 3763) {
+  #    # Can't seem to get rid of these two points. They are troublesome.
+  #    next
+  #  }
+  #  if(histAbove >= histCount) {
+  #    keepIndexNew <- c(keepIndexNew, rowInt)
+  #  }
+  #}
+  }
+  
+  #train <- data6[trainSet2[[it]], ]
+  train <- dataAdj2[trainSet2[[it]], ]
+  #test <- data6[testSet2[[it]], ]
+  test <- dataAdj2[testSet2[[it]], ]
   
   train <- na.omit(train)
   test <- na.omit(test)
@@ -1183,9 +1361,9 @@ for(it in 1:iters) {
   newFormulaNew <- as.formula(formulaStrNew)
   modSelectedNew <- lm(newFormulaNew, data=train)
   
-  modelVec[[it]] <- modSelectedNew
+  modelVec2[[it]] <- modSelectedNew
   tempAIC <- AIC(modSelectedNew)
-  aicVec <- c(aicVec, tempAIC)
+  aicVec2 <- c(aicVec2, tempAIC)
   
   predictSelected <- data.frame(pred=predict(modSelectedNew, newdata=test), actual=test$price, 
                                 index=as.numeric(rownames(test)), row.names=rownames(test))
@@ -1276,6 +1454,7 @@ for(it in 1:iters) {
   
   # https://www.statology.org/how-to-rename-data-frame-columns-in-r/
   names(joinedPreds)[names(joinedPreds) == 'actual.x'] <- 'actual'
+  rownames(joinedPreds) <- joinedPreds$index
   
   for(i in 1:nrow(joinedPreds)) {
     # Unpack historical prices
@@ -1288,7 +1467,7 @@ for(it in 1:iters) {
     joinedPreds[i, 'hybrid'] <- mean(c(histPricesIndv, predPrice))
   }
   
-  row.names(joinedPreds) <- joinedPreds$index
+  rownames(joinedPreds) <- joinedPreds$index
   joinedPreds <- joinedPreds[ordered(joinedPreds$index), ]
   
   # Regression MSE, RMSE
@@ -1387,6 +1566,7 @@ for(it in 1:iters) {
   joinedPredsTrain <- subset(joinedPredsTrain, select=c('index', 'pred', 'actual.x', 'histPrices', 'predHist'))
   
   names(joinedPredsTrain)[names(joinedPredsTrain) == 'actual.x'] <- 'actual'
+  rownames(joinedPredsTrain) <- joinedPredsTrain$index
   
   # Model with weights
   transformedDataTrain <- train
@@ -1651,6 +1831,11 @@ for(it in 1:iters) {
   
   jp <- joinedPredsTrain
   tdt2 <- transformedDataTrain2
+  
+  rownames(jp) <- as.character(jp$index)
+  tryData <- merge(jp, tdt2, by='row.names')
+  rownames(tryData) <- tryData$index
+  
   fancyFormulaMSE <- function(w) {
     mean(
       (
@@ -1665,52 +1850,64 @@ for(it in 1:iters) {
   ww <- aaa$par/sum(aaa$par)
   
   jpT <- joinedPreds
+  rownames(jpT) <- as.character(jpT$index)
   tdt2T <- transformedDataTest2
-  for(i in 1:nrow(jpT))
+  tryData <- merge(jpT, tdt2T, by='row.names')
+  rownames(tryData) <- tryData$index
+  #for(i in 1:nrow(jpT))
+  for(i in 1:nrow(tryData))
   {
-    pr <- jpT[i, 'pred']
-    phi <- as.numeric(tdt2T[i, 14:18])
-    pa <- jpT[i, 'actual']
-    iphi <- as.numeric(tdt2T[i, 19:23])
+    #pr <- jpT[i, 'pred']
+    #phi <- as.numeric(tdt2T[i, 14:18])
+    #pa <- jpT[i, 'actual']
+    #iphi <- as.numeric(tdt2T[i, 19:23])
+    #res <- fancyFormula(pr, phi, pa, iphi, ww)
+    #jpT[i, 'fancy'] <- res
+    
+    pr <- tryData[i, 'pred']
+    phi <- as.numeric(tryData[i, 21:25])
+    pa <- tryData[i, 'actual']
+    iphi <- as.numeric(tryData[i, 26:30])
     res <- fancyFormula(pr, phi, pa, iphi, ww)
-    jpT[i, 'fancy'] <- res
+    tryData[i, 'fancy'] <- res
   }
   
-  fancyMSE <- mean((jpT$actual - jpT$fancy)^2)
+  #fancyMSE <- mean((jpT$actual - jpT$fancy)^2)
+  fancyMSE <- mean((tryData$actual - tryData$fancy)^2)
   fancyRMSE <- sqrt(fancyMSE)
   
-  regressRMSEVec <- c(regressRMSEVec, regressRMSE)
-  histRMSEVec <- c(histRMSEVec, histRMSE)
-  hybridRMSEVec <- c(hybridRMSEVec, hybridRMSE)
-  fancyRMSEVec <- c(fancyRMSEVec, fancyRMSE)
+  regressRMSEVec2 <- c(regressRMSEVec2, regressRMSE)
+  histRMSEVec2 <- c(histRMSEVec2, histRMSE)
+  hybridRMSEVec2 <- c(hybridRMSEVec2, hybridRMSE)
+  fancyRMSEVec2 <- c(fancyRMSEVec2, fancyRMSE)
   
   for(i in 1:6) {
     s <- paste0('w', i)
-    weights[it, s] <- ww[i]
+    weights2[it, s] <- ww[i]
   }
 }
 
-avgRegressRMSE <- mean(regressRMSEVec)
-avgHistRMSE <- mean(histRMSEVec)
-avgHybridRMSE  <- mean(hybridRMSEVec)
-avgFancyRMSE <- mean(fancyRMSEVec)
-avgWeights <- data.frame(w1=mean(weights[, 'w1']), w2=mean(weights[, 'w2']),
-                         w3=mean(weights[, 'w3']), w4=mean(weights[, 'w4']),
-                         w5=mean(weights[, 'w5']), w6=mean(weights[, 'w6']))
+avgRegressRMSE2 <- mean(regressRMSEVec2)
+avgHistRMSE2 <- mean(histRMSEVec2)
+avgHybridRMSE2  <- mean(hybridRMSEVec2)
+avgFancyRMSE2 <- mean(fancyRMSEVec2)
+avgWeights2 <- data.frame(w1=mean(weights2[, 'w1']), w2=mean(weights2[, 'w2']),
+                         w3=mean(weights2[, 'w3']), w4=mean(weights2[, 'w4']),
+                         w5=mean(weights2[, 'w5']), w6=mean(weights2[, 'w6']))
 
-avgRegressRMSE
-avgHistRMSE
-avgHybridRMSE
-avgFancyRMSE
-avgWeights
+avgRegressRMSE2
+avgHistRMSE2
+avgHybridRMSE2
+avgFancyRMSE2
+avgWeights2
 
-min(avgRegressRMSE, avgHistRMSE, avgHybridRMSE, avgFancyRMSE)
+min(avgRegressRMSE2, avgHistRMSE2, avgHybridRMSE2, avgFancyRMSE2)
 
 #========== Isolation forest, model from normal houses ========
-minAicIndex <- which(aicVec == min(aicVec))
-bestModel <- modelVec[[minAicIndex]]
+minAicIndex2 <- which(aicVec2 == min(aicVec2))
+bestModel2 <- modelVec2[[minAicIndex2]]
 
-predRegressIsoAll <-  data.frame(pred=predict(bestModel, newdata=dataIsoAll), actual=dataIsoAll$price, 
+predRegressIsoAll <-  data.frame(pred=predict(bestModel2, newdata=dataIsoAll), actual=dataIsoAll$price, 
                               index=as.numeric(rownames(dataIsoAll)), row.names=rownames(dataIsoAll))
 
 predHistoricalAll <- data.frame(actual=dataIsoAll$price, index=as.numeric(rownames(dataIsoAll)), row.names=rownames(dataIsoAll))
@@ -1788,6 +1985,8 @@ for(i in 1:nrow(dataIsoAll)) {
 joinedPredsAll <- merge(predRegressIsoAll, predHistoricalAll, by='index')
 joinedPredsAll <- subset(joinedPredsAll, select=c('index', 'pred', 'actual.x', 'histPrices', 'predHist'))
 names(joinedPredsAll)[names(joinedPredsAll) == 'actual.x'] <- 'actual'
+rownames(joinedPredsAll) <- joinedPredsAll$index
+
 
 for(i in 1:nrow(joinedPredsAll)) {
   # Unpack historical prices
@@ -1800,7 +1999,7 @@ for(i in 1:nrow(joinedPredsAll)) {
   joinedPredsAll[i, 'hybrid'] <- mean(c(histPricesIndv, predPrice))
 }
 
-row.names(joinedPredsAll) <- joinedPredsAll$index
+rownames(joinedPredsAll) <- joinedPredsAll$index
 joinedPredsAll <- joinedPredsAll[ordered(joinedPredsAll$index), ]
 
 transformedDataAll <- dataIsoAll
@@ -1950,35 +2149,48 @@ for(i in 1:5) {
 
 jpA <- joinedPredsAll
 tdt2A <- transformedDataAll2
-for(i in 1:nrow(jpA))
+
+rownames(jpA) <- as.character(jpA$index)
+tryDataAll <- merge(jpA, tdt2TA, by='row.names')
+rownames(tryDataAll) <- tryDataAll$index
+
+#for(i in 1:nrow(jpA))
+for(i in 1:nrow(tryDataAll))
 {
-  pr <- jpA[i, 'pred']
-  phi <- as.numeric(tdt2A[i, 14:18])
-  pa <- jpA[i, 'actual']
-  iphi <- as.numeric(tdt2A[i, 19:23])
-  res <- fancyFormula(pr, phi, pa, iphi, avgWeights)
-  jpA[i, 'fancy'] <- res
+  #pr <- jpA[i, 'pred']
+  #phi <- as.numeric(tdt2A[i, 14:18])
+  #pa <- jpA[i, 'actual']
+  #iphi <- as.numeric(tdt2A[i, 19:23])
+  #res <- fancyFormula(pr, phi, pa, iphi, avgWeights)
+  #jpA[i, 'fancy'] <- res
+  
+  pr <- tryDataAll[i, 'pred']
+  phi <- as.numeric(tryDataAll[i, 21:25])
+  pa <- tryData[i, 'actual']
+  iphi <- as.numeric(tryDataAll[i, 26:30])
+  res <- fancyFormula(pr, phi, pa, iphi, ww)
+  tryDataAll[i, 'fancy'] <- res
 }
 
-fancyAllMSE <- mean((jpA$actual - jpA$fancy)^2)
-fancyAllRMSE <- sqrt(fancyAllMSE)
-fancyAllMSE
-fancyAllRMSE
+#fancyAllMSE2 <- mean((jpA$actual - jpA$fancy)^2)
+fancyAllMSE2 <- mean((tryDataAll$actual - tryDataAll$fancy)^2)
+fancyAllRMSE2 <- sqrt(fancyAllMSE2)
 
-regressAllMSE <- mean((joinedPredsAll$pred - joinedPredsAll$actual)^2)
-regressAllRMSE <- sqrt(regressAllMSE)
+regressAllMSE2 <- mean((joinedPredsAll$pred - joinedPredsAll$actual)^2)
+regressAllRMSE2 <- sqrt(regressAllMSE2)
 
 # Historical MSE, RMSE
-histAllMSE <- mean((joinedPredsAll$predHist - joinedPredsAll$actual)^2)
-histAllRMSE <- sqrt(histAllMSE)
+histAllMSE2 <- mean((joinedPredsAll$predHist - joinedPredsAll$actual)^2)
+histAllRMSE2 <- sqrt(histAllMSE2)
 
 # Hybrid MSE, RMSE
-hybridAllMSE <- mean((joinedPredsAll$hybrid - joinedPredsAll$actual)^2)
-hybridAllRMSE <- sqrt(hybridAllMSE)
+hybridAllMSE2 <- mean((joinedPredsAll$hybrid - joinedPredsAll$actual)^2)
+hybridAllRMSE2 <- sqrt(hybridAllMSE2)
 
-regressAllRMSE
-histAllRMSE
-hybridAllRMSE
-fancyAllRMSE
+regressAllRMSE2
+histAllRMSE2
+hybridAllRMSE2
+fancyAllRMSE2
 
-min(regressAllRMSE, histAllRMSE, hybridAllRMSE, fancyAllRMSE)
+min(regressAllRMSE2, histAllRMSE2, hybridAllRMSE2, fancyAllRMSE2)
+
