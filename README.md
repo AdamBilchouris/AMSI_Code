@@ -15,8 +15,6 @@ This repository contains code to recreate the models and results for the AMSI VR
 * sumSuburbs_columns.csv contains crime data, although it is not used, but still required to run the script.
     * This was obtained [here](https://www.crimestatistics.vic.gov.au/crime-statistics/latest-victorian-crime-data/download-data) (Data Tables LGA Criminal Incidents Year Ending June 2021 (XLSX, 17.33 MB)).
 
-* 
-
 ## Files
 * LoopedClean.R
     * This file contains code to produce the four models.
